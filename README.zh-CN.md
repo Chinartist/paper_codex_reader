@@ -123,7 +123,7 @@ file:///C:/Users/me/Documents/paper.pdf
 ### Codex 对话
 
 - 通过本地 Codex CLI 调用 Codex，不需要 API Key。
-- 支持 Codex CLI 登录，并在应用内显示检测到的登录/状态。
+- 支持在应用内发起 Codex 登录、退出 Codex 账号，并显示检测到的登录/状态。
 - 可选择 Codex 模型、自定义模型、推理级别、详细程度、分块大小和超时时间。
 - 可以新建对话，也可以继续历史对话。
 - 可以直接提问，也可以带着 PDF 选区一起提问。

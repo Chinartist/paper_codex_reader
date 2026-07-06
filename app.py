@@ -454,9 +454,12 @@ class CodexRunner:
     def __init__(self, store: Store):
         self.store = store
 
-    def status(self) -> Dict[str, Any]:
+    def _configured_path(self) -> str:
         settings = self.store.settings()
-        path = settings.get("codex_path") or "codex"
+        return settings.get("codex_path") or "codex"
+
+    def status(self) -> Dict[str, Any]:
+        path = self._configured_path()
         result = {
             "path": path,
             "exists": path_exists_or_command(path),
@@ -476,6 +479,39 @@ class CodexRunner:
             result["login_status"] = str(exc)
             result["login_ok"] = False
         return result
+
+    def login(self) -> Dict[str, Any]:
+        path = self._configured_path()
+        if not path_exists_or_command(path):
+            raise ValueError(f"Codex CLI not found: {path}")
+        popen_kwargs: Dict[str, Any] = {
+            "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+        }
+        if sys.platform.startswith("win"):
+            popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        else:
+            popen_kwargs["start_new_session"] = True
+        process = subprocess.Popen([path, "login"], **popen_kwargs)
+        return {
+            "started": True,
+            "pid": process.pid,
+            "message": "Codex login started. Complete the login flow in the browser or Codex window, then refresh status.",
+        }
+
+    def logout(self) -> Dict[str, Any]:
+        path = self._configured_path()
+        if not path_exists_or_command(path):
+            raise ValueError(f"Codex CLI not found: {path}")
+        result = subprocess.run([path, "logout"], capture_output=True, text=True, timeout=30)
+        output = (result.stdout or result.stderr).strip()
+        if result.returncode != 0:
+            raise ValueError(output or f"Codex logout failed with exit code {result.returncode}")
+        return {
+            "ok": True,
+            "message": output or "Codex credentials removed.",
+        }
 
     def send(self, conv: Dict[str, Any], prompt: str, cancel_event: Optional[threading.Event] = None) -> Tuple[str, Optional[str]]:
         session_id = conv.get("codex_session_id")
@@ -882,6 +918,10 @@ class AppHandler(SimpleHTTPRequestHandler):
         try:
             if path == "/api/settings":
                 json_response(self, self.store.update_settings(read_json(self)))
+            elif path == "/api/codex/login":
+                json_response(self, self.codex.login())
+            elif path == "/api/codex/logout":
+                json_response(self, self.codex.logout())
             elif path == "/api/papers/import":
                 data = read_json(self)
                 if data.get("data_base64") and data.get("filename"):

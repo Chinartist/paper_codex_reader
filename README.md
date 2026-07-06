@@ -123,7 +123,7 @@ file:///C:/Users/me/Documents/paper.pdf
 ### Codex Chat
 
 - Use the local Codex CLI instead of an API key.
-- Log in through Codex CLI and view the detected login/status inside the app.
+- Start Codex login, log out of Codex, and view the detected login/status inside the app.
 - Choose Codex model, custom model, reasoning effort, verbosity, chunk size, and timeout.
 - Start a new conversation or continue a historical conversation.
 - Ask questions directly, with or without selected PDF passages.

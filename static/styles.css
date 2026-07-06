@@ -680,8 +680,12 @@ body.chat-collapsed .chat-edge-toggle {
 
 .account-actions {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+
+.account-actions #settingsBtn {
+  grid-column: 1 / -1;
 }
 
 .reader {

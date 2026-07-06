@@ -216,10 +216,49 @@ function handleModelChange(selectId, customId) {
 async function loadStatus() {
   const status = await api("/api/status");
   const login = status.login_ok ? "已登录" : "未确认登录";
+  const exists = Boolean(status.exists);
   $("codexStatus").innerHTML = `
     <strong>${escapeHtml(login)}</strong>
     <span>${escapeHtml(status.version || status.version_error || "未找到版本")}</span>
   `;
+  $("codexLoginBtn").disabled = !exists || status.login_ok;
+  $("codexLogoutBtn").disabled = !exists || !status.login_ok;
+  $("codexLoginBtn").title = exists ? "打开 Codex 登录流程" : "未找到 Codex CLI";
+  $("codexLogoutBtn").title = exists ? "退出当前 Codex 账号" : "未找到 Codex CLI";
+}
+
+async function startCodexLogin() {
+  const button = $("codexLoginBtn");
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "打开中";
+  try {
+    const result = await api("/api/codex/login", { method: "POST", body: "{}" });
+    toast(result.message || "已打开 Codex 登录流程，请完成登录后刷新状态", 7000);
+    window.setTimeout(() => loadStatus().catch(() => {}), 2000);
+  } catch (error) {
+    toast(error.message || "无法打开 Codex 登录流程", 7000);
+  } finally {
+    button.textContent = originalText;
+    await loadStatus().catch(() => {});
+  }
+}
+
+async function logoutCodex() {
+  if (!window.confirm("确定要退出当前 Codex 账号吗？")) return;
+  const button = $("codexLogoutBtn");
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "退出中";
+  try {
+    const result = await api("/api/codex/logout", { method: "POST", body: "{}" });
+    toast(result.message || "已退出 Codex 账号");
+  } catch (error) {
+    toast(error.message || "退出 Codex 账号失败", 7000);
+  } finally {
+    button.textContent = originalText;
+    await loadStatus().catch(() => {});
+  }
 }
 
 async function loadPapers() {
@@ -1577,6 +1616,8 @@ function bindEvents() {
   $("addPromptBtn").addEventListener("click", () => openPromptForm());
   $("promptForm").addEventListener("submit", savePromptTemplate);
   $("cancelPromptBtn").addEventListener("click", closePromptForm);
+  $("codexLoginBtn").addEventListener("click", startCodexLogin);
+  $("codexLogoutBtn").addEventListener("click", logoutCodex);
   $("settingsBtn").addEventListener("click", () => $("settingsDialog").showModal());
   $("saveConversationTitleBtn").addEventListener("click", saveConversationTitle);
   $("savePaperTitleBtn").addEventListener("click", savePaperTitle);
