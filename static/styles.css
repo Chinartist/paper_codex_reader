@@ -433,6 +433,13 @@ body.chat-collapsed .chat-edge-toggle {
 .conversation-folder {
   display: grid;
   gap: 6px;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.conversation-folder.dragging,
+.conversation-item.dragging {
+  opacity: 0.5;
+  transform: scale(0.985);
 }
 
 .folder-toggle {
@@ -443,7 +450,7 @@ body.chat-collapsed .chat-edge-toggle {
   color: var(--sidebar-muted);
   box-shadow: none;
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-columns: 15px 18px minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   padding: 0 7px;
@@ -504,6 +511,23 @@ body.chat-collapsed .chat-edge-toggle {
   line-height: 1.45;
 }
 
+.sidebar-drag-grip {
+  width: 14px;
+  height: 24px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, currentColor 1.1px, transparent 1.5px) 2px 4px / 6px 6px,
+    radial-gradient(circle, currentColor 1.1px, transparent 1.5px) 8px 4px / 6px 6px;
+  color: rgba(148, 163, 184, 0.55);
+  opacity: 0.68;
+  cursor: grab;
+}
+
+.conversation-folder:active .sidebar-drag-grip,
+.conversation-item:active .sidebar-drag-grip {
+  cursor: grabbing;
+}
+
 .conversation-folder.active .folder-count,
 .conversation-folder.running .folder-count {
   border-color: #3c5f8f;
@@ -539,6 +563,20 @@ body.chat-collapsed .chat-edge-toggle {
 
 .sidebar .conversation-item {
   background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr);
+  column-gap: 7px;
+  align-items: center;
+}
+
+.conversation-grip {
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.conversation-item .list-title-row,
+.conversation-item .meta {
+  grid-column: 2;
 }
 
 .list-item:hover {
@@ -550,6 +588,12 @@ body.chat-collapsed .chat-edge-toggle {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(148, 163, 184, 0.28);
   transform: translateY(-1px);
+}
+
+.conversation-folder:focus-visible,
+.conversation-item:focus-visible {
+  outline: 2px solid rgba(96, 165, 250, 0.72);
+  outline-offset: 2px;
 }
 
 .list-item.active {

@@ -47,6 +47,8 @@ const state = {
   editingPromptId: null,
   selectionPositionFrame: 0,
   draggingTaskId: null,
+  draggingFolderKey: null,
+  draggingConversationId: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -588,6 +590,7 @@ async function loadConversations() {
 }
 
 function renderConversations() {
+  if (state.draggingFolderKey || state.draggingConversationId) return;
   const list = $("conversationsList");
   list.innerHTML = "";
   if (!state.conversations.length) {
@@ -604,8 +607,13 @@ function renderConversations() {
     const hasRunningTask = group.conversations.some((conv) => activeTaskForConversation(conv.id));
     const section = document.createElement("section");
     section.className = `conversation-folder${hasActiveConversation ? " active" : ""}${hasRunningTask ? " running" : ""}`;
+    section.dataset.groupKey = group.key;
+    section.draggable = true;
+    section.tabIndex = 0;
+    section.title = "拖动调整文件夹顺序";
     section.innerHTML = `
       <button class="folder-toggle" type="button" aria-expanded="${String(!isCollapsed)}">
+        <span class="sidebar-drag-grip" aria-hidden="true"></span>
         <span class="folder-chevron${isCollapsed ? " collapsed" : ""}" aria-hidden="true"></span>
         <span class="folder-title">${escapeHtml(group.title)}</span>
         <span class="folder-count">${group.conversations.length}</span>
@@ -613,6 +621,11 @@ function renderConversations() {
       <div class="folder-children${isCollapsed ? " hidden" : ""}"></div>
     `;
     section.querySelector(".folder-toggle").addEventListener("click", () => toggleConversationGroup(group.key));
+    section.addEventListener("dragstart", handleFolderDragStart);
+    section.addEventListener("dragover", handleFolderDragOver);
+    section.addEventListener("drop", handleSidebarDrop);
+    section.addEventListener("dragend", handleFolderDragEnd);
+    section.addEventListener("keydown", handleFolderKeyboardReorder);
     const children = section.querySelector(".folder-children");
     for (const conv of group.conversations) {
       children.appendChild(renderConversationItem(conv));
@@ -624,28 +637,46 @@ function renderConversations() {
 function conversationGroups() {
   const groups = [];
   const byKey = new Map();
-  for (const conv of state.conversations) {
-    const key = conv.paper_id ? `paper:${conv.paper_id}` : "paper:none";
+  for (const [index, conv] of state.conversations.entries()) {
+    const key = conv.folder_key || (conv.paper_id ? `paper:${conv.paper_id}` : "paper:none");
     if (!byKey.has(key)) {
       const group = {
         key,
         title: conv.paper_title || (conv.paper_id ? "已删除论文" : "空对话"),
         conversations: [],
+        fallbackOrder: index,
+        order: Number.isFinite(Number(conv.folder_order)) ? Number(conv.folder_order) : null,
       };
       groups.push(group);
       byKey.set(key, group);
     }
-    byKey.get(key).conversations.push(conv);
+    byKey.get(key).conversations.push({ ...conv, fallbackOrder: index });
   }
-  return groups;
+  for (const group of groups) {
+    group.conversations.sort((a, b) =>
+      compareOptionalOrder(a.conversation_order, a.fallbackOrder, b.conversation_order, b.fallbackOrder)
+    );
+  }
+  return groups.sort((a, b) => compareOptionalOrder(a.order, a.fallbackOrder, b.order, b.fallbackOrder));
+}
+
+function compareOptionalOrder(orderA, fallbackA, orderB, fallbackB) {
+  const a = Number.isFinite(Number(orderA)) ? Number(orderA) : 1000000 + Number(fallbackA || 0);
+  const b = Number.isFinite(Number(orderB)) ? Number(orderB) : 1000000 + Number(fallbackB || 0);
+  return a - b;
 }
 
 function renderConversationItem(conv) {
   const item = document.createElement("div");
   item.className = "list-item conversation-item" + (state.activeConversation?.id === conv.id ? " active" : "");
+  item.dataset.conversationId = conv.id;
+  item.draggable = true;
+  item.tabIndex = 0;
+  item.title = "拖动调整会话顺序";
   const subtitle = conv.paper_title ? conv.paper_title : "无绑定论文";
   const pending = activeTaskForConversation(conv.id);
   item.innerHTML = `
+    <span class="sidebar-drag-grip conversation-grip" aria-hidden="true"></span>
     <div class="list-title-row">
       <strong>${escapeHtml(conv.title)}</strong>
       <span class="conversation-actions">
@@ -656,7 +687,15 @@ function renderConversationItem(conv) {
     </div>
     <div class="meta">${escapeHtml(pending ? pending.label : subtitle)}</div>
   `;
-  item.addEventListener("click", () => selectConversation(conv.id));
+  item.addEventListener("click", (event) => {
+    if (state.draggingConversationId || event.target.closest(".sidebar-drag-grip")) return;
+    selectConversation(conv.id);
+  });
+  item.addEventListener("dragstart", handleConversationDragStart);
+  item.addEventListener("dragover", handleConversationDragOver);
+  item.addEventListener("drop", handleSidebarDrop);
+  item.addEventListener("dragend", handleConversationDragEnd);
+  item.addEventListener("keydown", handleConversationKeyboardReorder);
   item.querySelector(".rename-conversation-btn").addEventListener("click", (event) => {
     event.stopPropagation();
     openRenameConversation(conv.id);
@@ -666,6 +705,139 @@ function renderConversationItem(conv) {
     deleteConversation(conv.id);
   });
   return item;
+}
+
+function handleSidebarDrop(event) {
+  event.preventDefault();
+}
+
+function conversationFolderItems() {
+  return [...$("conversationsList").querySelectorAll(".conversation-folder")];
+}
+
+function conversationItemsForContainer(container) {
+  return [...container.querySelectorAll(".conversation-item")];
+}
+
+function handleFolderDragStart(event) {
+  const section = event.currentTarget;
+  state.draggingFolderKey = section.dataset.groupKey;
+  section.classList.add("dragging");
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", state.draggingFolderKey);
+}
+
+function handleFolderDragOver(event) {
+  event.preventDefault();
+  const dragging = $("conversationsList").querySelector(".conversation-folder.dragging");
+  const target = event.currentTarget;
+  if (!dragging || dragging === target) return;
+  const rect = target.getBoundingClientRect();
+  const before = event.clientY < rect.top + rect.height / 2;
+  $("conversationsList").insertBefore(dragging, before ? target : target.nextSibling);
+}
+
+async function handleFolderDragEnd(event) {
+  event.currentTarget.classList.remove("dragging");
+  state.draggingFolderKey = null;
+  await persistFolderOrder();
+}
+
+async function handleFolderKeyboardReorder(event) {
+  if (!event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+  event.preventDefault();
+  const items = conversationFolderItems();
+  const currentIndex = items.indexOf(event.currentTarget);
+  const nextIndex = currentIndex + (event.key === "ArrowUp" ? -1 : 1);
+  if (currentIndex < 0 || nextIndex < 0 || nextIndex >= items.length) return;
+  const list = $("conversationsList");
+  if (nextIndex < currentIndex) {
+    list.insertBefore(event.currentTarget, items[nextIndex]);
+  } else {
+    list.insertBefore(event.currentTarget, items[nextIndex].nextSibling);
+  }
+  event.currentTarget.focus();
+  await persistFolderOrder();
+}
+
+async function persistFolderOrder() {
+  try {
+    const groupKeys = conversationFolderItems().map((item) => item.dataset.groupKey).filter(Boolean);
+    state.conversations = await api("/api/conversation-folders/reorder", {
+      method: "POST",
+      body: JSON.stringify({ group_keys: groupKeys }),
+    });
+    renderConversations();
+  } catch (error) {
+    toast(error.message || "调整文件夹顺序失败", 7000);
+    await loadConversations();
+  }
+}
+
+function handleConversationDragStart(event) {
+  const item = event.currentTarget;
+  state.draggingConversationId = item.dataset.conversationId;
+  item.classList.add("dragging");
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", state.draggingConversationId);
+  event.stopPropagation();
+}
+
+function handleConversationDragOver(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const dragging = $("conversationsList").querySelector(".conversation-item.dragging");
+  const target = event.currentTarget;
+  if (!dragging || dragging === target) return;
+  const sourceContainer = dragging.closest(".folder-children");
+  const targetContainer = target.closest(".folder-children");
+  if (!sourceContainer || sourceContainer !== targetContainer) return;
+  const rect = target.getBoundingClientRect();
+  const before = event.clientY < rect.top + rect.height / 2;
+  targetContainer.insertBefore(dragging, before ? target : target.nextSibling);
+}
+
+async function handleConversationDragEnd(event) {
+  event.stopPropagation();
+  event.currentTarget.classList.remove("dragging");
+  const container = event.currentTarget.closest(".folder-children");
+  state.draggingConversationId = null;
+  if (container) {
+    await persistConversationOrder(container);
+  }
+}
+
+async function handleConversationKeyboardReorder(event) {
+  if (!event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const container = event.currentTarget.closest(".folder-children");
+  if (!container) return;
+  const items = conversationItemsForContainer(container);
+  const currentIndex = items.indexOf(event.currentTarget);
+  const nextIndex = currentIndex + (event.key === "ArrowUp" ? -1 : 1);
+  if (currentIndex < 0 || nextIndex < 0 || nextIndex >= items.length) return;
+  if (nextIndex < currentIndex) {
+    container.insertBefore(event.currentTarget, items[nextIndex]);
+  } else {
+    container.insertBefore(event.currentTarget, items[nextIndex].nextSibling);
+  }
+  event.currentTarget.focus();
+  await persistConversationOrder(container);
+}
+
+async function persistConversationOrder(container) {
+  try {
+    const conversationIds = conversationItemsForContainer(container).map((item) => item.dataset.conversationId).filter(Boolean);
+    state.conversations = await api("/api/conversations/reorder", {
+      method: "POST",
+      body: JSON.stringify({ conversation_ids: conversationIds }),
+    });
+    renderConversations();
+  } catch (error) {
+    toast(error.message || "调整会话顺序失败", 7000);
+    await loadConversations();
+  }
 }
 
 function toggleConversationGroup(groupKey) {

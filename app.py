@@ -299,6 +299,24 @@ class Store:
                     )
         return self.settings()
 
+    def json_setting(self, key: str) -> Dict[str, Any]:
+        with self.connect() as con:
+            row = con.execute("select value from settings where key = ?", (key,)).fetchone()
+        if not row:
+            return {}
+        try:
+            value = json.loads(row["value"])
+        except Exception:
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    def save_json_setting(self, key: str, value: Dict[str, Any]) -> None:
+        with self.connect() as con:
+            con.execute(
+                "insert into settings(key, value) values (?, ?) on conflict(key) do update set value=excluded.value",
+                (key, json.dumps(value, ensure_ascii=False)),
+            )
+
     def list_papers(self) -> List[Dict[str, Any]]:
         with self.connect() as con:
             rows = con.execute("select * from papers order by created_at desc").fetchall()
@@ -378,6 +396,8 @@ class Store:
         return {"id": paper_id, "title": title, "path": str(path), "source": source, "created_at": created}
 
     def list_conversations(self) -> List[Dict[str, Any]]:
+        folder_order = self.json_setting("conversation_folder_order")
+        conversation_order = self.json_setting("conversation_order")
         with self.connect() as con:
             rows = con.execute(
                 """
@@ -387,7 +407,43 @@ class Store:
                 order by c.updated_at desc
                 """
             ).fetchall()
-            return [dict(row) for row in rows]
+        conversations = []
+        for row in rows:
+            item = dict(row)
+            folder_key = f"paper:{item['paper_id']}" if item.get("paper_id") else "paper:none"
+            item["folder_key"] = folder_key
+            item["folder_order"] = folder_order.get(folder_key)
+            item["conversation_order"] = conversation_order.get(item["id"])
+            conversations.append(item)
+        return conversations
+
+    def reorder_conversation_folders(self, group_keys: List[str]) -> List[Dict[str, Any]]:
+        if not isinstance(group_keys, list):
+            raise ValueError("Provide group_keys as a list.")
+        clean_keys = [str(key) for key in group_keys if str(key)]
+        order = self.json_setting("conversation_folder_order")
+        for index, key in enumerate(clean_keys):
+            order[key] = index
+        self.save_json_setting("conversation_folder_order", order)
+        return self.list_conversations()
+
+    def reorder_conversations(self, conversation_ids: List[str]) -> List[Dict[str, Any]]:
+        if not isinstance(conversation_ids, list):
+            raise ValueError("Provide conversation_ids as a list.")
+        clean_ids = [str(conv_id) for conv_id in conversation_ids if str(conv_id)]
+        if clean_ids:
+            placeholders = ",".join("?" for _ in clean_ids)
+            with self.connect() as con:
+                rows = con.execute(f"select id from conversations where id in ({placeholders})", clean_ids).fetchall()
+            found = {row["id"] for row in rows}
+            missing = [conv_id for conv_id in clean_ids if conv_id not in found]
+            if missing:
+                raise ValueError("Conversation not found.")
+        order = self.json_setting("conversation_order")
+        for index, conv_id in enumerate(clean_ids):
+            order[conv_id] = index
+        self.save_json_setting("conversation_order", order)
+        return self.list_conversations()
 
     def create_conversation(self, paper_id: Optional[str], title: Optional[str] = None) -> Dict[str, Any]:
         conv_id = str(uuid.uuid4())
@@ -1092,6 +1148,12 @@ class AppHandler(SimpleHTTPRequestHandler):
                 data = read_json(self)
                 conv = self.store.create_conversation(data.get("paper_id"), data.get("title"))
                 json_response(self, conv)
+            elif path == "/api/conversations/reorder":
+                data = read_json(self)
+                json_response(self, self.store.reorder_conversations(data.get("conversation_ids") or []))
+            elif path == "/api/conversation-folders/reorder":
+                data = read_json(self)
+                json_response(self, self.store.reorder_conversation_folders(data.get("group_keys") or []))
             elif path.startswith("/api/conversations/") and path.count("/") == 3:
                 conv_id = path.split("/")[3]
                 data = read_json(self)
