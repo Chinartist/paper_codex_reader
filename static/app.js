@@ -49,6 +49,8 @@ const state = {
   draggingTaskId: null,
   draggingFolderKey: null,
   draggingConversationId: null,
+  sidebarDrag: null,
+  suppressSidebarClickUntil: 0,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -681,7 +683,7 @@ async function loadConversations() {
 }
 
 function renderConversations() {
-  if (state.draggingFolderKey || state.draggingConversationId) return;
+  if (state.draggingFolderKey || state.draggingConversationId || state.sidebarDrag) return;
   const list = $("conversationsList");
   list.innerHTML = "";
   if (!state.conversations.length) {
@@ -699,12 +701,12 @@ function renderConversations() {
     const section = document.createElement("section");
     section.className = `conversation-folder${hasActiveConversation ? " active" : ""}${hasRunningTask ? " running" : ""}`;
     section.dataset.groupKey = group.key;
-    section.draggable = true;
+    section.draggable = false;
     section.tabIndex = 0;
-    section.title = "拖动调整文件夹顺序";
+    section.title = "按 Alt + ↑/↓ 调整文件夹顺序，也可以拖动抓手";
     section.innerHTML = `
       <button class="folder-toggle" type="button" aria-expanded="${String(!isCollapsed)}">
-        <span class="sidebar-drag-grip" aria-hidden="true"></span>
+        <span class="sidebar-drag-grip folder-grip" aria-hidden="true" title="拖动调整文件夹顺序"></span>
         <span class="folder-chevron${isCollapsed ? " collapsed" : ""}" aria-hidden="true"></span>
         <span class="folder-title">${escapeHtml(group.title)}</span>
         <span class="folder-count">${group.conversations.length}</span>
@@ -712,10 +714,7 @@ function renderConversations() {
       <div class="folder-children${isCollapsed ? " hidden" : ""}"></div>
     `;
     section.querySelector(".folder-toggle").addEventListener("click", () => toggleConversationGroup(group.key));
-    section.addEventListener("dragstart", handleFolderDragStart);
-    section.addEventListener("dragover", handleFolderDragOver);
-    section.addEventListener("drop", handleSidebarDrop);
-    section.addEventListener("dragend", handleFolderDragEnd);
+    wireSidebarDragHandle(section.querySelector(".folder-grip"), section, "folder");
     section.addEventListener("keydown", handleFolderKeyboardReorder);
     const children = section.querySelector(".folder-children");
     for (const conv of group.conversations) {
@@ -761,13 +760,13 @@ function renderConversationItem(conv) {
   const item = document.createElement("div");
   item.className = "list-item conversation-item" + (state.activeConversation?.id === conv.id ? " active" : "");
   item.dataset.conversationId = conv.id;
-  item.draggable = true;
+  item.draggable = false;
   item.tabIndex = 0;
-  item.title = "拖动调整会话顺序";
+  item.title = "按 Alt + ↑/↓ 调整会话顺序，也可以拖动抓手";
   const subtitle = conv.paper_title ? conv.paper_title : "无绑定论文";
   const pending = activeTaskForConversation(conv.id);
   item.innerHTML = `
-    <span class="sidebar-drag-grip conversation-grip" aria-hidden="true"></span>
+    <span class="sidebar-drag-grip conversation-grip" aria-hidden="true" title="拖动调整会话顺序"></span>
     <div class="list-title-row">
       <strong>${escapeHtml(conv.title)}</strong>
       <span class="conversation-actions">
@@ -779,13 +778,10 @@ function renderConversationItem(conv) {
     <div class="meta">${escapeHtml(pending ? pending.label : subtitle)}</div>
   `;
   item.addEventListener("click", (event) => {
-    if (state.draggingConversationId || event.target.closest(".sidebar-drag-grip")) return;
+    if (state.draggingConversationId || Date.now() < state.suppressSidebarClickUntil || event.target.closest(".sidebar-drag-grip")) return;
     selectConversation(conv.id);
   });
-  item.addEventListener("dragstart", handleConversationDragStart);
-  item.addEventListener("dragover", handleConversationDragOver);
-  item.addEventListener("drop", handleSidebarDrop);
-  item.addEventListener("dragend", handleConversationDragEnd);
+  wireSidebarDragHandle(item.querySelector(".conversation-grip"), item, "conversation");
   item.addEventListener("keydown", handleConversationKeyboardReorder);
   item.querySelector(".rename-conversation-btn").addEventListener("click", (event) => {
     event.stopPropagation();
@@ -796,6 +792,95 @@ function renderConversationItem(conv) {
     deleteConversation(conv.id);
   });
   return item;
+}
+
+function wireSidebarDragHandle(handle, item, type) {
+  if (!handle) return;
+  handle.addEventListener("pointerdown", (event) => startSidebarPointerDrag(event, item, type));
+  handle.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+}
+
+function startSidebarPointerDrag(event, item, type) {
+  if (event.button !== 0) return;
+  const container = type === "folder" ? $("conversationsList") : item.closest(".folder-children");
+  if (!container) return;
+  const sortableItems = type === "folder" ? conversationFolderItems() : conversationItemsForContainer(container);
+  if (sortableItems.length < 2) return;
+  event.preventDefault();
+  event.stopPropagation();
+
+  state.sidebarDrag = {
+    type,
+    item,
+    container,
+    startY: event.clientY,
+    didMove: false,
+  };
+  if (type === "folder") {
+    state.draggingFolderKey = item.dataset.groupKey;
+  } else {
+    state.draggingConversationId = item.dataset.conversationId;
+  }
+  item.classList.add("dragging");
+  container.classList.add("sorting");
+  document.body.classList.add("sidebar-sorting");
+  try {
+    event.currentTarget.setPointerCapture(event.pointerId);
+  } catch {
+    // Pointer capture can fail if the browser has already released the pointer.
+  }
+  document.addEventListener("pointermove", handleSidebarPointerMove);
+  document.addEventListener("pointerup", handleSidebarPointerUp);
+  document.addEventListener("pointercancel", handleSidebarPointerUp);
+}
+
+function handleSidebarPointerMove(event) {
+  const drag = state.sidebarDrag;
+  if (!drag) return;
+  event.preventDefault();
+  if (Math.abs(event.clientY - drag.startY) > 3) {
+    drag.didMove = true;
+  }
+  const items = [...drag.container.querySelectorAll(drag.type === "folder" ? ".conversation-folder" : ".conversation-item")]
+    .filter((item) => item !== drag.item);
+  let inserted = false;
+  for (const target of items) {
+    const rect = target.getBoundingClientRect();
+    if (event.clientY < rect.top + rect.height / 2) {
+      drag.container.insertBefore(drag.item, target);
+      inserted = true;
+      break;
+    }
+  }
+  if (!inserted) {
+    drag.container.appendChild(drag.item);
+  }
+}
+
+async function handleSidebarPointerUp(event) {
+  const drag = state.sidebarDrag;
+  if (!drag) return;
+  event.preventDefault();
+  event.stopPropagation();
+  document.removeEventListener("pointermove", handleSidebarPointerMove);
+  document.removeEventListener("pointerup", handleSidebarPointerUp);
+  document.removeEventListener("pointercancel", handleSidebarPointerUp);
+  drag.item.classList.remove("dragging");
+  drag.container.classList.remove("sorting");
+  document.body.classList.remove("sidebar-sorting");
+  state.draggingFolderKey = null;
+  state.draggingConversationId = null;
+  state.sidebarDrag = null;
+  if (!drag.didMove) return;
+  state.suppressSidebarClickUntil = Date.now() + 250;
+  if (drag.type === "folder") {
+    await persistFolderOrder();
+  } else {
+    await persistConversationOrder(drag.container);
+  }
 }
 
 function handleSidebarDrop(event) {
