@@ -1208,15 +1208,17 @@ function appendMessage(role, content, meta = {}) {
   node.innerHTML = `
     <div class="role">${role === "user" ? "你" : "Codex"}</div>
     <pre>${escapeHtml(content)}</pre>
-    ${role === "user" ? `
+    ${["user", "assistant"].includes(role) ? `
       <div class="message-actions" aria-label="消息操作">
         <button class="message-action-btn copy-message-btn" type="button" aria-label="复制" title="复制"></button>
-        <button class="message-action-btn edit-message-btn" type="button" aria-label="编辑再发送" title="编辑再发送"></button>
+        ${role === "user" ? `<button class="message-action-btn edit-message-btn" type="button" aria-label="编辑再发送" title="编辑再发送"></button>` : ""}
       </div>
     ` : ""}
   `;
+  if (["user", "assistant"].includes(role)) {
+    node.querySelector(".copy-message-btn")?.addEventListener("click", () => copyMessageContent(content));
+  }
   if (role === "user") {
-    node.querySelector(".copy-message-btn").addEventListener("click", () => copyMessageContent(content));
     node.querySelector(".edit-message-btn").addEventListener("click", () => startResendEdit(content, meta.id || ""));
   }
   box.appendChild(node);
