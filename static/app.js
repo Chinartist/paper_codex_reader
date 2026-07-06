@@ -651,7 +651,7 @@ async function loadMessages() {
     box.innerHTML = `
       <div class="empty-state">
         <h2>可以直接开始</h2>
-        <p>右下角输入问题会自动创建当前论文对话。想先让 Codex 读完整篇，就点“重新读取论文”。</p>
+        <p>右下角输入问题会自动创建当前论文对话。想先让 Codex 读完整篇，就点“读全文”。</p>
       </div>
     `;
     return;
@@ -686,7 +686,7 @@ async function initializeConversation() {
   await ensureConversation();
   const convId = state.activeConversation.id;
   try {
-    appendMessage("user", `重新读取论文：${state.activePaper.title}`);
+    appendMessage("user", `读全文：${state.activePaper.title}`);
     scrollMessages();
     await api(`/api/conversations/${convId}/initialize`, {
       method: "POST",
@@ -696,7 +696,7 @@ async function initializeConversation() {
     await loadTasks({ silent: true });
     updateContextHint();
     scrollMessages();
-    toast("初始化任务已加入队列");
+    toast("读全文任务已加入队列");
   } catch (error) {
     if (state.activeConversation?.id === convId) {
       appendMessage("assistant", `出错了：${error.message}`);

@@ -759,14 +759,14 @@ class TaskManager:
 def init_prompt(title: str, content: str, index: int, total: int, final: bool) -> str:
     if final:
         instruction = (
-            "你正在初始化一个读论文对话。下面是论文内容"
+            "你正在读全文模式下读取论文。下面是论文内容"
             f"（第 {index}/{total} 块）。请阅读并记住它，后续用户会直接提问或选中文本提问。\n"
             "请不要生成独立的 Paper Brief，不要做代码索引。读完后只用中文简短回复："
             "你已经读完这篇论文，可以开始提问；如果内容太长，请说明你已尽力保留主要上下文。"
         )
     else:
         instruction = (
-            "你正在初始化一个读论文对话。下面是论文内容"
+            "你正在读全文模式下读取论文。下面是论文内容"
             f"（第 {index}/{total} 块）。请阅读并保留上下文，等待后续块。"
             "请只用一句中文确认已读取本块，不要总结。"
         )
@@ -977,8 +977,8 @@ class AppHandler(SimpleHTTPRequestHandler):
         paper = self.store.get_paper(paper_id)
         if not paper:
             raise ValueError("Paper not found.")
-        user_msg = self.store.add_message(conv_id, "user", f"重新读取论文：{paper['title']}")
-        task = self.tasks.enqueue_initialize(conv_id, paper["id"], f"重新读取论文：{paper['title']}")
+        user_msg = self.store.add_message(conv_id, "user", f"读全文：{paper['title']}")
+        task = self.tasks.enqueue_initialize(conv_id, paper["id"], f"读全文：{paper['title']}")
         json_response(self, {"user": user_msg, "task": task})
 
     def handle_message(self, conv_id: str) -> None:
