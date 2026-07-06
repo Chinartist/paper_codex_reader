@@ -705,6 +705,27 @@ class Store:
             con.execute("update conversations set updated_at = ? where id = ?", (stamp, conv_id))
         return {"id": msg_id, "conversation_id": conv_id, "role": role, "content": content, "created_at": stamp}
 
+    def update_message_content(self, conv_id: str, msg_id: str, content: str) -> Dict[str, Any]:
+        clean_content = content.strip()
+        if not clean_content:
+            raise ValueError("Message is empty.")
+        stamp = now_iso()
+        with self.connect() as con:
+            cur = con.execute(
+                "update messages set content = ? where id = ? and conversation_id = ? and role = 'user'",
+                (clean_content, msg_id, conv_id),
+            )
+            if cur.rowcount == 0:
+                raise ValueError("Message not found.")
+            con.execute("update conversations set updated_at = ? where id = ?", (stamp, conv_id))
+        return {
+            "id": msg_id,
+            "conversation_id": conv_id,
+            "role": "user",
+            "content": clean_content,
+            "updated_at": stamp,
+        }
+
     def list_messages(self, conv_id: str) -> List[Dict[str, Any]]:
         with self.connect() as con:
             rows = con.execute(
@@ -1049,15 +1070,51 @@ class TaskManager:
             self.condition.notify_all()
             return [self._public_task(task) for task in sorted(self.tasks.values(), key=self._task_sort_key)]
 
-    def enqueue_message(self, conversation_id: str, prompt: str, label: str) -> Dict[str, Any]:
-        return self._enqueue(conversation_id, "message", label, lambda event: self._run_message(conversation_id, prompt, event))
+    def edit(self, task_id: str, prompt: str) -> Dict[str, Any]:
+        clean_prompt = prompt.strip()
+        if not clean_prompt:
+            raise ValueError("Message is empty.")
+        with self.condition:
+            task = self.tasks.get(task_id)
+            if not task:
+                raise ValueError("Task not found.")
+            if task["status"] != "queued" or task["kind"] != "message":
+                raise ValueError("Only queued message tasks can be edited.")
+            task["prompt"] = clean_prompt
+            task["editable_content"] = clean_prompt
+            task["label"] = (clean_prompt.splitlines()[0] or "向 Codex 提问").strip()[:80]
+            task["updated_at"] = now_iso()
+            conversation_id = task["conversation_id"]
+            user_message_id = task.get("user_message_id")
+            public = self._public_task(task)
+            self.condition.notify_all()
+        if user_message_id:
+            self.store.update_message_content(conversation_id, user_message_id, clean_prompt)
+        return public
 
-    def enqueue_initialize(self, conversation_id: str, paper_id: str, label: str) -> Dict[str, Any]:
+    def enqueue_message(
+        self,
+        conversation_id: str,
+        prompt: str,
+        label: str,
+        user_message_id: Optional[str] = None,
+        editable_content: Optional[str] = None,
+    ) -> Dict[str, Any]:
         return self._enqueue(
-            conversation_id, "initialize", label, lambda event: self._run_initialize(conversation_id, paper_id, event)
+            conversation_id,
+            "message",
+            label,
+            {
+                "prompt": prompt,
+                "editable_content": editable_content or prompt,
+                "user_message_id": user_message_id,
+            },
         )
 
-    def _enqueue(self, conversation_id: str, kind: str, label: str, runner: Any) -> Dict[str, Any]:
+    def enqueue_initialize(self, conversation_id: str, paper_id: str, label: str) -> Dict[str, Any]:
+        return self._enqueue(conversation_id, "initialize", label, {"paper_id": paper_id})
+
+    def _enqueue(self, conversation_id: str, kind: str, label: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         task_id = str(uuid.uuid4())
         event = threading.Event()
         task = {
@@ -1070,6 +1127,7 @@ class TaskManager:
             "created_at": now_iso(),
             "updated_at": now_iso(),
             "error": None,
+            **payload,
         }
         with self.condition:
             task["queue_order"] = self.next_queue_order
@@ -1077,11 +1135,11 @@ class TaskManager:
             self.tasks[task_id] = task
             self.cancel_events[task_id] = event
             self.condition.notify_all()
-        thread = threading.Thread(target=self._thread_main, args=(task_id, runner, event), daemon=True)
+        thread = threading.Thread(target=self._thread_main, args=(task_id, event), daemon=True)
         thread.start()
         return self._public_task(task)
 
-    def _thread_main(self, task_id: str, runner: Any, event: threading.Event) -> None:
+    def _thread_main(self, task_id: str, event: threading.Event) -> None:
         with self.condition:
             while True:
                 task = self.tasks.get(task_id)
@@ -1097,7 +1155,7 @@ class TaskManager:
                     break
                 self.condition.wait(timeout=0.5)
         try:
-            runner(event)
+            self._run_task(task_id, event)
             if event.is_set():
                 self._finish(task_id, "canceled")
             else:
@@ -1108,10 +1166,23 @@ class TaskManager:
             else:
                 self._finish(task_id, "error", str(exc))
 
+    def _run_task(self, task_id: str, event: threading.Event) -> None:
+        with self.lock:
+            task = dict(self.tasks.get(task_id) or {})
+        kind = task.get("kind")
+        if kind == "message":
+            self._run_message(task["conversation_id"], task.get("prompt") or "", event)
+        elif kind == "initialize":
+            self._run_initialize(task["conversation_id"], task.get("paper_id") or "", event)
+        else:
+            raise RuntimeError("Unknown task type.")
+
     def _run_message(self, conversation_id: str, prompt: str, event: threading.Event) -> None:
         conv = self.store.get_conversation(conversation_id)
         if not conv:
             raise RuntimeError("Conversation not found.")
+        if not prompt.strip():
+            raise RuntimeError("Message is empty.")
         answer, session_id = self.codex.send(conv, prompt, event)
         self.store.update_conversation_session(conversation_id, session_id, initialized=False)
         self.store.add_message(conversation_id, "assistant", answer)
@@ -1174,6 +1245,14 @@ class TaskManager:
     def _public_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
         public = dict(task)
         public["can_reorder"] = task.get("status") == "queued"
+        public["can_edit"] = task.get("status") == "queued" and task.get("kind") == "message"
+        if public["can_edit"]:
+            public["editable_content"] = task.get("editable_content") or task.get("prompt") or ""
+        else:
+            public.pop("editable_content", None)
+        public.pop("prompt", None)
+        public.pop("user_message_id", None)
+        public.pop("paper_id", None)
         return public
 
 
@@ -1345,6 +1424,10 @@ class AppHandler(SimpleHTTPRequestHandler):
             elif path.startswith("/api/tasks/") and path.endswith("/cancel"):
                 task_id = path.split("/")[3]
                 json_response(self, self.tasks.cancel(task_id))
+            elif path.startswith("/api/tasks/") and path.count("/") == 3:
+                task_id = path.split("/")[3]
+                data = read_json(self)
+                json_response(self, self.tasks.edit(task_id, data.get("content") or ""))
             elif path == "/api/tasks/reorder":
                 data = read_json(self)
                 json_response(self, self.tasks.reorder(data.get("task_ids") or []))
@@ -1441,7 +1524,7 @@ class AppHandler(SimpleHTTPRequestHandler):
             raise ValueError("Message is empty.")
         user_msg = self.store.add_message(conv_id, "user", visible)
         label = (visible.splitlines()[0] or "向 Codex 提问").strip()
-        task = self.tasks.enqueue_message(conv_id, prompt, label[:80])
+        task = self.tasks.enqueue_message(conv_id, prompt, label[:80], user_msg["id"], visible)
         json_response(self, {"user": user_msg, "task": task})
 
 

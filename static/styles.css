@@ -1293,6 +1293,7 @@ body.resizing-chat {
 }
 
 .task-cancel-btn,
+.task-edit-btn,
 .task-more-btn {
   min-height: 30px;
   border: 0;
@@ -1302,10 +1303,39 @@ body.resizing-chat {
 }
 
 .task-cancel-btn,
+.task-edit-btn,
 .task-more-btn {
   width: 30px;
   padding: 0;
   border-radius: 999px;
+}
+
+.task-edit-btn {
+  position: relative;
+}
+
+.task-edit-btn::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 15px;
+  width: 11px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: rotate(-42deg);
+}
+
+.task-edit-btn::after {
+  content: "";
+  position: absolute;
+  left: 18px;
+  top: 9px;
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: currentColor;
+  transform: rotate(-42deg);
 }
 
 .task-cancel-btn::before,
@@ -1347,6 +1377,7 @@ body.resizing-chat {
   background: radial-gradient(circle, currentColor 1.3px, transparent 1.6px) 0 50% / 6px 4px repeat-x;
 }
 
+.task-edit-btn:hover,
 .task-cancel-btn:hover,
 .task-more-btn:hover {
   background: rgba(255, 255, 255, 0.07);
@@ -1869,6 +1900,7 @@ body.resizing-chat {
 }
 
 .library-dialog,
+.task-edit-dialog,
 .settings-dialog {
   width: min(1120px, calc(100vw - 36px));
   max-height: calc(100dvh - 36px);
@@ -1884,13 +1916,19 @@ body.resizing-chat {
   width: min(520px, calc(100vw - 36px));
 }
 
+.task-edit-dialog {
+  width: min(680px, calc(100vw - 36px));
+}
+
 .library-dialog::backdrop,
+.task-edit-dialog::backdrop,
 .settings-dialog::backdrop {
   background: rgba(15, 23, 42, 0.46);
   backdrop-filter: blur(4px);
 }
 
 .library-dialog form,
+.task-edit-dialog form,
 .settings-dialog form {
   padding: 0;
   display: grid;
@@ -1913,6 +1951,10 @@ body.resizing-chat {
   padding: 16px 18px;
   border-bottom: 1px solid var(--border);
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.compact-dialog-head {
+  min-height: 64px;
 }
 
 .dialog-actions {
@@ -1953,6 +1995,23 @@ body.resizing-chat {
   color: #0f172a;
   box-shadow: none;
   transform: none;
+}
+
+.task-edit-field {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.task-edit-field textarea {
+  min-height: 220px;
+  resize: vertical;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .library-grid {

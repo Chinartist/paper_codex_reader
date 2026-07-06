@@ -48,6 +48,7 @@ const state = {
   promptTemplates: loadPromptTemplates(),
   conversationDrafts: loadConversationDrafts(),
   editingPromptId: null,
+  editingTaskId: null,
   selectionPositionFrame: 0,
   draggingTaskId: null,
   draggingFolderKey: null,
@@ -1325,6 +1326,7 @@ function renderTasks() {
         <span>${escapeHtml(status)}${meta && meta !== status ? ` · ${escapeHtml(meta)}` : ""}</span>
       </div>
       <div class="task-actions">
+        ${task.can_edit ? `<button class="task-edit-btn" type="button" data-task-id="${escapeHtml(task.id)}" aria-label="编辑排队任务" title="编辑"></button>` : ""}
         <button class="task-cancel-btn" type="button" data-task-id="${escapeHtml(task.id)}" aria-label="取消任务" title="取消任务"></button>
         <button class="task-more-btn" type="button" aria-label="更多" title="更多"></button>
       </div>
@@ -1336,6 +1338,7 @@ function renderTasks() {
       item.addEventListener("dragend", handleTaskDragEnd);
       item.addEventListener("keydown", handleTaskKeyboardReorder);
     }
+    item.querySelector(".task-edit-btn")?.addEventListener("click", () => openTaskEditor(task.id));
     item.querySelector(".task-cancel-btn").addEventListener("click", () => cancelTask(task.id));
     list.appendChild(item);
   }
@@ -1422,6 +1425,51 @@ async function cancelTask(taskId) {
     toast("已请求取消任务");
   } catch (error) {
     toast(error.message, 7000);
+  }
+}
+
+function openTaskEditor(taskId) {
+  const task = state.tasks.find((item) => item.id === taskId);
+  if (!task?.can_edit) {
+    toast("只能编辑正在排队的提问");
+    return;
+  }
+  state.editingTaskId = taskId;
+  $("taskEditInput").value = task.editable_content || task.label || "";
+  $("taskEditDialog").showModal();
+  $("taskEditInput").focus();
+}
+
+function closeTaskEditor() {
+  state.editingTaskId = null;
+  $("taskEditInput").value = "";
+  $("taskEditDialog").close();
+}
+
+async function saveTaskEdit(event) {
+  event.preventDefault();
+  const taskId = state.editingTaskId;
+  const content = $("taskEditInput").value.trim();
+  if (!taskId) return;
+  if (!content) {
+    toast("请输入任务内容");
+    return;
+  }
+  try {
+    await api(`/api/tasks/${taskId}`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    });
+    const task = state.tasks.find((item) => item.id === taskId);
+    closeTaskEditor();
+    await loadTasks({ silent: true });
+    if (task?.conversation_id && state.activeConversation?.id === task.conversation_id) {
+      await loadMessages();
+    }
+    toast("已更新排队任务");
+  } catch (error) {
+    toast(error.message || "编辑任务失败", 7000);
+    await loadTasks({ silent: true });
   }
 }
 
@@ -2206,6 +2254,9 @@ function bindEvents() {
   $("addPromptBtn").addEventListener("click", () => openPromptForm());
   $("promptForm").addEventListener("submit", savePromptTemplate);
   $("cancelPromptBtn").addEventListener("click", closePromptForm);
+  $("taskEditForm").addEventListener("submit", saveTaskEdit);
+  $("cancelTaskEditBtn").addEventListener("click", closeTaskEditor);
+  $("discardTaskEditBtn").addEventListener("click", closeTaskEditor);
   $("codexLoginBtn").addEventListener("click", startCodexLogin);
   $("codexLogoutBtn").addEventListener("click", logoutCodex);
   $("settingsBtn").addEventListener("click", () => $("settingsDialog").showModal());

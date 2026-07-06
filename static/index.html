@@ -168,6 +168,26 @@
 
     <button id="expandChatBtn" class="icon-btn edge-panel-toggle chat-edge-toggle" type="button" aria-label="展开右侧栏" title="展开右侧栏">&lt;</button>
 
+    <dialog id="taskEditDialog" class="task-edit-dialog">
+      <form id="taskEditForm" method="dialog">
+        <div class="dialog-head compact-dialog-head">
+          <div>
+            <h2>编辑排队任务</h2>
+            <p>只会修改尚未开始的任务。</p>
+          </div>
+          <button class="icon-btn dialog-close" value="cancel" type="button" aria-label="关闭" title="关闭" id="cancelTaskEditBtn">×</button>
+        </div>
+        <label class="task-edit-field" for="taskEditInput">
+          即将发送给 Codex 的内容
+          <textarea id="taskEditInput" rows="9"></textarea>
+        </label>
+        <div class="dialog-actions">
+          <button class="secondary-btn" type="button" id="discardTaskEditBtn">取消</button>
+          <button type="submit" id="saveTaskEditBtn">保存</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="libraryDialog" class="library-dialog">
       <form method="dialog">
         <div class="dialog-head">
