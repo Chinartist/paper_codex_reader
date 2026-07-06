@@ -36,6 +36,10 @@ cd paper_codex_reader
 .\run.ps1
 ```
 
+如果在 Windows 上登录 Codex 时出现 `Access is denied`，请查看
+[WINDOWS.md](WINDOWS.md)。某些 Windows 应用包路径可以被系统发现，
+但不能被这个本地 Python 服务直接启动。
+
 CMD：
 
 ```bat
