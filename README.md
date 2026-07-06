@@ -18,6 +18,8 @@ You need:
 - Codex installed and working on your machine
 - A modern browser
 
+Recommended: ask Codex to install dependencies and start the app for you.
+
 ## Run On macOS / Linux
 
 ```bash
