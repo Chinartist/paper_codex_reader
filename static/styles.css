@@ -1523,7 +1523,7 @@ body.resizing-chat {
 
 .library-dialog,
 .settings-dialog {
-  width: min(1080px, calc(100vw - 36px));
+  width: min(1120px, calc(100vw - 36px));
   max-height: calc(100dvh - 36px);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -1550,6 +1550,7 @@ body.resizing-chat {
   gap: 0;
   max-height: calc(100dvh - 38px);
   overflow: auto;
+  overflow-x: hidden;
 }
 
 .dialog-head,
@@ -1609,7 +1610,7 @@ body.resizing-chat {
 
 .library-grid {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: 1fr;
   gap: 0;
   min-height: min(620px, calc(100dvh - 180px));
 }
@@ -1621,15 +1622,19 @@ body.resizing-chat {
 .library-import,
 .library-list {
   min-height: 0;
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 10px;
   padding: 16px 18px 18px;
 }
 
 .library-import {
-  border-right: 1px solid var(--border);
-  background: linear-gradient(180deg, #fbfcfd 0%, #f6f8fb 100%);
+  border-bottom: 1px solid var(--border);
+  background: #fbfcfd;
+}
+
+.library-list {
+  grid-template-rows: auto minmax(0, 1fr);
+  background: #ffffff;
 }
 
 .library-toolbar {
@@ -1646,17 +1651,18 @@ body.resizing-chat {
 }
 
 .library-browser {
-  flex: 1;
   min-height: 0;
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
-  gap: 12px;
+  grid-template-columns: minmax(340px, 1fr) minmax(320px, 420px);
+  gap: 14px;
+  overflow: hidden;
 }
 
 .paper-table {
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: white;
@@ -1740,11 +1746,13 @@ body.resizing-chat {
 
 .paper-detail {
   min-height: 0;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   padding: 14px;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   box-shadow: var(--panel-shadow);
 }
 
@@ -1784,8 +1792,9 @@ body.resizing-chat {
 
 .paper-detail h3 {
   margin: 0 0 12px;
-  font-size: 17px;
+  font-size: 16px;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .paper-detail dl {
@@ -1806,18 +1815,25 @@ body.resizing-chat {
   font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .paper-detail-actions {
   margin-top: 16px;
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.paper-detail-actions button {
+  flex: 1 1 110px;
 }
 
 .import-box {
   display: grid;
-  gap: 10px;
+  grid-template-columns: minmax(220px, 1.1fr) minmax(220px, 1fr) minmax(180px, 0.8fr) auto;
+  gap: 12px;
+  align-items: end;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: #ffffff;
@@ -1828,8 +1844,33 @@ body.resizing-chat {
 .import-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
   gap: 8px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.import-row button {
+  justify-self: start;
+}
+
+.import-row span {
+  min-width: 0;
+}
+
+#importPaperBtn {
+  min-width: 96px;
+}
+
+.library-import h3 {
+  margin-bottom: 0;
+}
+
+.library-import .field-label {
+  min-width: 0;
+}
+
+.library-import .field-label input {
+  min-width: 0;
 }
 
 .import-row span {
@@ -1919,6 +1960,10 @@ body.resizing-chat {
   .codex-controls {
     grid-template-columns: 1fr 1fr;
   }
+
+  .import-box {
+    grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr);
+  }
 }
 
 @media (max-width: 940px) {
@@ -1972,12 +2017,12 @@ body.resizing-chat {
   }
 
   .library-import {
-    border-right: 0;
     border-bottom: 1px solid var(--border);
   }
 
   .library-toolbar,
-  .library-browser {
+  .library-browser,
+  .import-box {
     grid-template-columns: 1fr;
   }
 
@@ -1991,7 +2036,7 @@ body.resizing-chat {
     justify-content: start;
   }
 
-  .paper-detail-actions {
-    grid-template-columns: 1fr;
+  .paper-detail-actions button {
+    flex-basis: 100%;
   }
 }
