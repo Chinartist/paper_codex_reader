@@ -138,6 +138,7 @@ file:///C:/Users/me/Documents/paper.pdf
 - Conversations are grouped under papers for easier navigation, while each conversation keeps its own Codex session id.
 - Different conversations can run tasks in parallel.
 - Tasks inside the same conversation stay ordered.
+- Queue multiple sends in the same conversation and reorder queued tasks by dragging them in the task panel.
 - View queued/running tasks and cancel tasks from the task panel.
 
 ### Prompt Templates
@@ -163,6 +164,7 @@ Global shortcuts are ignored while typing in an input, textarea, select, or edit
 | `PageDown` | Scroll the PDF reader down |
 | `PageUp` | Scroll the PDF reader up |
 | `Enter` in rename dialogs | Save the new paper or conversation name |
+| `Alt+Up/Down` on a queued task | Move that queued task earlier or later |
 | `Left/Right Arrow` on the chat resizer | Resize the right chat panel |
 | `Shift+Left/Right Arrow` on the chat resizer | Resize the right chat panel faster |
 | `Home` on the chat resizer | Set the right chat panel to minimum width |

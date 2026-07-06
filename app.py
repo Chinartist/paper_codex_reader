@@ -753,14 +753,15 @@ class TaskManager:
     def __init__(self, store: Store, codex: CodexRunner):
         self.store = store
         self.codex = codex
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
+        self.condition = threading.Condition(self.lock)
         self.tasks: Dict[str, Dict[str, Any]] = {}
         self.cancel_events: Dict[str, threading.Event] = {}
-        self.conversation_locks: Dict[str, threading.Lock] = {}
+        self.next_queue_order = 0
 
     def list_tasks(self) -> List[Dict[str, Any]]:
         with self.lock:
-            return [self._public_task(task) for task in sorted(self.tasks.values(), key=lambda item: item["created_at"])]
+            return [self._public_task(task) for task in sorted(self.tasks.values(), key=self._task_sort_key)]
 
     def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
         with self.lock:
@@ -786,7 +787,33 @@ class TaskManager:
             task["updated_at"] = now_iso()
             if event:
                 event.set()
+            self.condition.notify_all()
             return self._public_task(task)
+
+    def reorder(self, task_ids: List[str]) -> List[Dict[str, Any]]:
+        if not isinstance(task_ids, list):
+            raise ValueError("Provide task_ids as a list.")
+        ordered_ids = [str(task_id) for task_id in task_ids]
+        with self.condition:
+            for task_id in ordered_ids:
+                task = self.tasks.get(task_id)
+                if not task:
+                    raise ValueError("Task not found.")
+            for index, task_id in enumerate(ordered_ids):
+                task = self.tasks[task_id]
+                if task["status"] == "queued":
+                    task["queue_order"] = index
+                    task["updated_at"] = now_iso()
+            trailing_order = len(task_ids)
+            for task in sorted(self.tasks.values(), key=self._task_sort_key):
+                if task["status"] == "queued" and task["id"] not in ordered_ids:
+                    task["queue_order"] = trailing_order
+                    trailing_order += 1
+            self.next_queue_order = max(
+                [self.next_queue_order] + [int(task.get("queue_order", 0)) + 1 for task in self.tasks.values()]
+            )
+            self.condition.notify_all()
+            return [self._public_task(task) for task in sorted(self.tasks.values(), key=self._task_sort_key)]
 
     def enqueue_message(self, conversation_id: str, prompt: str, label: str) -> Dict[str, Any]:
         return self._enqueue(conversation_id, "message", label, lambda event: self._run_message(conversation_id, prompt, event))
@@ -805,38 +832,47 @@ class TaskManager:
             "kind": kind,
             "label": label,
             "status": "queued",
+            "queue_order": 0,
             "created_at": now_iso(),
             "updated_at": now_iso(),
             "error": None,
         }
-        with self.lock:
+        with self.condition:
+            task["queue_order"] = self.next_queue_order
+            self.next_queue_order += 1
             self.tasks[task_id] = task
             self.cancel_events[task_id] = event
-            self.conversation_locks.setdefault(conversation_id, threading.Lock())
+            self.condition.notify_all()
         thread = threading.Thread(target=self._thread_main, args=(task_id, runner, event), daemon=True)
         thread.start()
         return self._public_task(task)
 
     def _thread_main(self, task_id: str, runner: Any, event: threading.Event) -> None:
-        task = self.tasks[task_id]
-        conv_id = task["conversation_id"]
-        conv_lock = self.conversation_locks[conv_id]
-        with conv_lock:
+        with self.condition:
+            while True:
+                task = self.tasks.get(task_id)
+                if not task:
+                    return
+                if event.is_set() or task["status"] == "canceling":
+                    self._finish_locked(task_id, "canceled")
+                    return
+                if self._is_next_for_conversation_locked(task_id):
+                    task["status"] = "running"
+                    task["updated_at"] = now_iso()
+                    self.condition.notify_all()
+                    break
+                self.condition.wait(timeout=0.5)
+        try:
+            runner(event)
             if event.is_set():
                 self._finish(task_id, "canceled")
-                return
-            self._mark(task_id, "running")
-            try:
-                runner(event)
-                if event.is_set():
-                    self._finish(task_id, "canceled")
-                else:
-                    self._finish(task_id, "done")
-            except Exception as exc:
-                if str(exc) == "Canceled.":
-                    self._finish(task_id, "canceled")
-                else:
-                    self._finish(task_id, "error", str(exc))
+            else:
+                self._finish(task_id, "done")
+        except Exception as exc:
+            if str(exc) == "Canceled.":
+                self._finish(task_id, "canceled")
+            else:
+                self._finish(task_id, "error", str(exc))
 
     def _run_message(self, conversation_id: str, prompt: str, event: threading.Event) -> None:
         conv = self.store.get_conversation(conversation_id)
@@ -856,20 +892,55 @@ class TaskManager:
         self.store.add_message(conversation_id, "assistant", answer)
 
     def _mark(self, task_id: str, status: str) -> None:
-        with self.lock:
+        with self.condition:
             self.tasks[task_id]["status"] = status
             self.tasks[task_id]["updated_at"] = now_iso()
+            self.condition.notify_all()
 
     def _finish(self, task_id: str, status: str, error: Optional[str] = None) -> None:
-        with self.lock:
-            task = self.tasks[task_id]
-            task["status"] = status
-            task["updated_at"] = now_iso()
-            task["error"] = error
-            self.cancel_events.pop(task_id, None)
+        with self.condition:
+            self._finish_locked(task_id, status, error)
+
+    def _finish_locked(self, task_id: str, status: str, error: Optional[str] = None) -> None:
+        task = self.tasks[task_id]
+        task["status"] = status
+        task["updated_at"] = now_iso()
+        task["error"] = error
+        self.cancel_events.pop(task_id, None)
+        self.condition.notify_all()
+
+    def _is_next_for_conversation_locked(self, task_id: str) -> bool:
+        task = self.tasks[task_id]
+        if task["status"] != "queued":
+            return False
+        conversation_id = task["conversation_id"]
+        if any(
+            item["conversation_id"] == conversation_id and item["status"] in {"running", "canceling"}
+            for item in self.tasks.values()
+        ):
+            return False
+        queued = sorted(
+            [
+                item
+                for item in self.tasks.values()
+                if item["conversation_id"] == conversation_id and item["status"] == "queued"
+            ],
+            key=self._task_sort_key,
+        )
+        return bool(queued) and queued[0]["id"] == task_id
+
+    def _task_sort_key(self, task: Dict[str, Any]) -> Tuple[int, int, str]:
+        status_order = {"running": 0, "canceling": 1, "queued": 2, "error": 3, "canceled": 4, "done": 5}
+        return (
+            status_order.get(task.get("status"), 9),
+            int(task.get("queue_order", 0)),
+            str(task.get("created_at", "")),
+        )
 
     def _public_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
-        return dict(task)
+        public = dict(task)
+        public["can_reorder"] = task.get("status") == "queued"
+        return public
 
 
 def init_prompt(title: str, content: str, index: int, total: int, final: bool) -> str:
@@ -1034,6 +1105,9 @@ class AppHandler(SimpleHTTPRequestHandler):
             elif path.startswith("/api/tasks/") and path.endswith("/cancel"):
                 task_id = path.split("/")[3]
                 json_response(self, self.tasks.cancel(task_id))
+            elif path == "/api/tasks/reorder":
+                data = read_json(self)
+                json_response(self, self.tasks.reorder(data.get("task_ids") or []))
             else:
                 json_response(self, {"error": "Not found"}, 404)
         except ValueError as exc:

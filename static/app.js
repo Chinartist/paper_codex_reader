@@ -46,6 +46,7 @@ const state = {
   promptTemplates: loadPromptTemplates(),
   editingPromptId: null,
   selectionPositionFrame: 0,
+  draggingTaskId: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -899,27 +900,111 @@ async function loadTasks({ silent } = { silent: false }) {
 }
 
 function renderTasks() {
+  if (state.draggingTaskId) return;
   const activeTasks = state.tasks.filter((task) => isActiveTask(task));
   $("queuePanel").classList.toggle("hidden", activeTasks.length === 0);
   $("queueCount").textContent = String(activeTasks.length);
-  $("queueSummary").textContent = activeTasks.length ? `${activeTasks.length} 个任务运行或排队中` : "没有运行中的任务";
+  const runningCount = activeTasks.filter((task) => task.status === "running" || task.status === "canceling").length;
+  const queuedCount = activeTasks.filter((task) => task.status === "queued").length;
+  $("queueSummary").textContent = activeTasks.length ? `运行 ${runningCount} · 排队 ${queuedCount}` : "没有运行中的任务";
   const list = $("taskList");
   list.innerHTML = "";
   for (const task of activeTasks) {
     const conv = state.conversations.find((item) => item.id === task.conversation_id);
     const item = document.createElement("div");
     item.className = `task-item ${task.status}`;
+    item.dataset.taskId = task.id;
+    item.draggable = task.can_reorder;
+    if (task.can_reorder) {
+      item.tabIndex = 0;
+      item.title = "拖动调整排队顺序";
+    }
     item.innerHTML = `
+      <span class="task-grip" aria-hidden="true"></span>
       <div>
         <strong>${escapeHtml(task.label || task.kind)}</strong>
         <span>${escapeHtml(taskStatusText(task.status))}${conv ? ` · ${escapeHtml(conv.title)}` : ""}</span>
       </div>
       <button class="small-btn danger-btn" type="button" data-task-id="${escapeHtml(task.id)}">取消</button>
     `;
+    if (task.can_reorder) {
+      item.addEventListener("dragstart", handleTaskDragStart);
+      item.addEventListener("dragover", handleTaskDragOver);
+      item.addEventListener("drop", handleTaskDrop);
+      item.addEventListener("dragend", handleTaskDragEnd);
+      item.addEventListener("keydown", handleTaskKeyboardReorder);
+    }
     item.querySelector("button").addEventListener("click", () => cancelTask(task.id));
     list.appendChild(item);
   }
   updateButtons();
+}
+
+function activeTaskIdsFromDom() {
+  return [...$("taskList").querySelectorAll(".task-item")].map((item) => item.dataset.taskId).filter(Boolean);
+}
+
+function queuedTaskItems() {
+  return [...$("taskList").querySelectorAll(".task-item.queued")];
+}
+
+function handleTaskDragStart(event) {
+  const item = event.currentTarget;
+  state.draggingTaskId = item.dataset.taskId;
+  item.classList.add("dragging");
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", state.draggingTaskId);
+}
+
+function handleTaskDragOver(event) {
+  event.preventDefault();
+  const dragging = $("taskList").querySelector(".task-item.dragging");
+  const target = event.currentTarget;
+  if (!dragging || dragging === target || !target.classList.contains("queued")) return;
+  const rect = target.getBoundingClientRect();
+  const before = event.clientY < rect.top + rect.height / 2;
+  $("taskList").insertBefore(dragging, before ? target : target.nextSibling);
+}
+
+function handleTaskDrop(event) {
+  event.preventDefault();
+}
+
+async function handleTaskDragEnd(event) {
+  event.currentTarget.classList.remove("dragging");
+  state.draggingTaskId = null;
+  await persistTaskOrder();
+}
+
+async function handleTaskKeyboardReorder(event) {
+  if (!event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+  event.preventDefault();
+  const items = queuedTaskItems();
+  const currentIndex = items.indexOf(event.currentTarget);
+  const nextIndex = currentIndex + (event.key === "ArrowUp" ? -1 : 1);
+  if (currentIndex < 0 || nextIndex < 0 || nextIndex >= items.length) return;
+  const list = $("taskList");
+  if (nextIndex < currentIndex) {
+    list.insertBefore(event.currentTarget, items[nextIndex]);
+  } else {
+    list.insertBefore(event.currentTarget, items[nextIndex].nextSibling);
+  }
+  event.currentTarget.focus();
+  await persistTaskOrder();
+}
+
+async function persistTaskOrder() {
+  try {
+    const taskIds = activeTaskIdsFromDom();
+    await api("/api/tasks/reorder", {
+      method: "POST",
+      body: JSON.stringify({ task_ids: taskIds }),
+    });
+    await loadTasks({ silent: true });
+  } catch (error) {
+    toast(error.message || "调整队列顺序失败", 7000);
+    await loadTasks({ silent: true });
+  }
 }
 
 async function cancelTask(taskId) {

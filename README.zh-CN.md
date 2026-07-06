@@ -138,6 +138,7 @@ file:///C:/Users/me/Documents/paper.pdf
 - 会话按论文分组展示，便于管理；每个会话仍保留自己的 Codex session id。
 - 不同会话的任务可以并行运行。
 - 同一个会话内的任务会按顺序执行。
+- 同一个会话可以连续发送多个问题进入队列，并在任务面板里拖动调整排队任务顺序。
 - 可以查看排队/运行中的任务，并在任务面板中取消任务。
 
 ### Prompt 模板
@@ -163,6 +164,7 @@ file:///C:/Users/me/Documents/paper.pdf
 | `PageDown` | PDF 阅读器向下滚动 |
 | `PageUp` | PDF 阅读器向上滚动 |
 | 改名弹窗内 `Enter` | 保存新的论文名或会话名 |
+| 聚焦排队任务时 `Alt+Up/Down` | 将该排队任务前移或后移 |
 | 聚焦右侧栏拖拽条时 `Left/Right Arrow` | 调整右侧聊天栏宽度 |
 | 聚焦右侧栏拖拽条时 `Shift+Left/Right Arrow` | 更快调整右侧聊天栏宽度 |
 | 聚焦右侧栏拖拽条时 `Home` | 右侧聊天栏设为最小宽度 |
