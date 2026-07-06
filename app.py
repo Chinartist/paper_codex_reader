@@ -115,6 +115,85 @@ def path_exists_or_command(value: str) -> bool:
     return bool(shutil.which(value) or pathlib.Path(value).expanduser().exists())
 
 
+def codex_home() -> pathlib.Path:
+    return pathlib.Path(os.environ.get("CODEX_HOME") or pathlib.Path.home() / ".codex").expanduser()
+
+
+def utc_iso_from_epoch(value: Any) -> Optional[str]:
+    try:
+        return dt.datetime.fromtimestamp(float(value), dt.timezone.utc).isoformat()
+    except Exception:
+        return None
+
+
+def sanitize_rate_limit(value: Any) -> Optional[Dict[str, Any]]:
+    if not isinstance(value, dict):
+        return None
+    used = value.get("used_percent")
+    try:
+        used_float = float(used)
+    except Exception:
+        used_float = None
+    limit = {
+        "used_percent": used_float,
+        "remaining_percent": round(max(0.0, 100.0 - used_float), 1) if used_float is not None else None,
+        "window_minutes": value.get("window_minutes"),
+        "resets_at": value.get("resets_at"),
+        "resets_at_iso": utc_iso_from_epoch(value.get("resets_at")),
+    }
+    return limit
+
+
+def latest_codex_usage() -> Dict[str, Any]:
+    sessions_dir = codex_home() / "sessions"
+    if not sessions_dir.exists():
+        return {"available": False, "message": "No local Codex session telemetry found."}
+    try:
+        files = sorted(
+            sessions_dir.glob("**/*.jsonl"),
+            key=lambda item: item.stat().st_mtime,
+            reverse=True,
+        )
+    except Exception as exc:
+        return {"available": False, "message": f"Unable to scan Codex usage telemetry: {exc}"}
+
+    for path in files[:40]:
+        try:
+            size = path.stat().st_size
+            with path.open("rb") as handle:
+                handle.seek(max(0, size - 2_000_000))
+                lines = handle.read().decode("utf-8", errors="ignore").splitlines()
+        except Exception:
+            continue
+        for line in reversed(lines):
+            if "token_count" not in line:
+                continue
+            try:
+                event = json.loads(line)
+            except Exception:
+                continue
+            payload = event.get("payload") or {}
+            if payload.get("type") != "token_count":
+                continue
+            info = payload.get("info") or {}
+            rate_limits = payload.get("rate_limits") or {}
+            return {
+                "available": True,
+                "source": "local_codex_session_telemetry",
+                "updated_at": event.get("timestamp"),
+                "plan_type": rate_limits.get("plan_type"),
+                "credits": rate_limits.get("credits"),
+                "individual_limit": rate_limits.get("individual_limit"),
+                "rate_limit_reached_type": rate_limits.get("rate_limit_reached_type"),
+                "primary": sanitize_rate_limit(rate_limits.get("primary")),
+                "secondary": sanitize_rate_limit(rate_limits.get("secondary")),
+                "total_token_usage": info.get("total_token_usage") or {},
+                "last_token_usage": info.get("last_token_usage") or {},
+                "model_context_window": info.get("model_context_window"),
+            }
+    return {"available": False, "message": "No recent Codex token usage event found."}
+
+
 def json_response(handler: SimpleHTTPRequestHandler, payload: Any, status: int = 200) -> None:
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     handler.send_response(status)
@@ -478,6 +557,7 @@ class CodexRunner:
         except Exception as exc:
             result["login_status"] = str(exc)
             result["login_ok"] = False
+        result["usage"] = latest_codex_usage()
         return result
 
     def login(self) -> Dict[str, Any]:

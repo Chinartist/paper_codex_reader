@@ -213,6 +213,95 @@ function handleModelChange(selectId, customId) {
   }
 }
 
+function formatNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "未知";
+  return new Intl.NumberFormat("zh-CN").format(number);
+}
+
+function formatPercent(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "未知";
+  return `${number.toFixed(number % 1 === 0 ? 0 : 1)}%`;
+}
+
+function formatTime(value) {
+  if (!value) return "未知";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "未知";
+  return date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function usageWindowRow(label, limit) {
+  if (!limit) {
+    return `
+      <div class="usage-window">
+        <div><strong>${escapeHtml(label)}</strong><span>暂无数据</span></div>
+      </div>
+    `;
+  }
+  const used = Number(limit.used_percent);
+  const width = Number.isFinite(used) ? clamp(used, 0, 100) : 0;
+  const windowText = limit.window_minutes ? `${Math.round(Number(limit.window_minutes) / 60 * 10) / 10} 小时窗口` : "窗口未知";
+  return `
+    <div class="usage-window">
+      <div>
+        <strong>${escapeHtml(label)}</strong>
+        <span>${escapeHtml(windowText)} · 剩余 ${escapeHtml(formatPercent(limit.remaining_percent))}</span>
+      </div>
+      <em>${escapeHtml(formatPercent(limit.used_percent))}</em>
+      <div class="usage-meter" aria-hidden="true"><i style="width:${width}%"></i></div>
+      <small>重置：${escapeHtml(formatTime(limit.resets_at_iso))}</small>
+    </div>
+  `;
+}
+
+function renderUsagePeek(usage) {
+  const peek = $("usagePeek");
+  const badge = $("usageBadge");
+  const card = $("usageCard");
+  if (!usage) {
+    peek.classList.add("hidden");
+    return;
+  }
+  peek.classList.remove("hidden");
+  if (!usage.available) {
+    badge.textContent = "用量未知";
+    badge.classList.add("muted");
+    card.innerHTML = `<p>${escapeHtml(usage.message || "Codex 未提供本地用量数据。")}</p>`;
+    return;
+  }
+  badge.classList.remove("muted");
+  const primary = usage.primary || {};
+  badge.textContent = `用量 ${formatPercent(primary.used_percent)}`;
+  const total = usage.total_token_usage || {};
+  const last = usage.last_token_usage || {};
+  const extraRows = [];
+  if (usage.credits !== null && usage.credits !== undefined) {
+    extraRows.push(`<span>Credits ${escapeHtml(formatNumber(usage.credits))}</span>`);
+  }
+  if (usage.individual_limit !== null && usage.individual_limit !== undefined) {
+    extraRows.push(`<span>个人限额 ${escapeHtml(formatNumber(usage.individual_limit))}</span>`);
+  }
+  if (usage.rate_limit_reached_type) {
+    extraRows.push(`<span>限额状态 ${escapeHtml(usage.rate_limit_reached_type)}</span>`);
+  }
+  card.innerHTML = `
+    <div class="usage-card-head">
+      <strong>Codex 用量</strong>
+      <span>${escapeHtml(usage.plan_type || "plan 未知")}</span>
+    </div>
+    ${usageWindowRow("短窗口", usage.primary)}
+    ${usageWindowRow("长窗口", usage.secondary)}
+    <div class="usage-stats">
+      <span>最近 ${escapeHtml(formatNumber(last.total_tokens))} tokens</span>
+      <span>累计 ${escapeHtml(formatNumber(total.total_tokens))} tokens</span>
+    </div>
+    ${extraRows.length ? `<div class="usage-stats">${extraRows.join("")}</div>` : ""}
+    <p>更新：${escapeHtml(formatTime(usage.updated_at))}</p>
+  `;
+}
+
 async function loadStatus() {
   const status = await api("/api/status");
   const login = status.login_ok ? "已登录" : "未确认登录";
@@ -225,6 +314,7 @@ async function loadStatus() {
   $("codexLogoutBtn").disabled = !exists || !status.login_ok;
   $("codexLoginBtn").title = exists ? "打开 Codex 登录流程" : "未找到 Codex CLI";
   $("codexLogoutBtn").title = exists ? "退出当前 Codex 账号" : "未找到 Codex CLI";
+  renderUsagePeek(status.usage);
 }
 
 async function startCodexLogin() {

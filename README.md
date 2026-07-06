@@ -124,6 +124,7 @@ file:///C:/Users/me/Documents/paper.pdf
 
 - Use the local Codex CLI instead of an API key.
 - Start Codex login, log out of Codex, and view the detected login/status inside the app.
+- Show recent Codex local usage and rate-limit windows in a compact hover card when local telemetry is available.
 - Choose Codex model, custom model, reasoning effort, verbosity, chunk size, and timeout.
 - Start a new conversation or continue a historical conversation.
 - Ask questions directly, with or without selected PDF passages.
