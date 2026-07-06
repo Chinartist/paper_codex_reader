@@ -1634,7 +1634,7 @@ body.resizing-chat {
 
 .library-toolbar {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 136px auto;
+  grid-template-columns: minmax(180px, 1fr) 136px;
   gap: 8px;
   align-items: center;
 }

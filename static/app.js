@@ -1535,8 +1535,6 @@ function bindEvents() {
   $("collapseChatBtn").addEventListener("click", () => setChatCollapsed(true));
   $("expandChatBtn").addEventListener("click", () => setChatCollapsed(false));
   populateModelSelects();
-  $("refreshPapersBtn").addEventListener("click", loadPapers);
-  $("refreshConversationsBtn").addEventListener("click", loadConversations);
   $("openLibraryBtn").addEventListener("click", () => $("libraryDialog").showModal());
   $("paperSearchInput").addEventListener("input", (event) => {
     state.libraryQuery = event.target.value;
