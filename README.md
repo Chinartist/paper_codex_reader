@@ -15,17 +15,8 @@ It uses the local Codex CLI, so it can use your ChatGPT/Codex membership quota i
 You need:
 
 - Python 3.10+
-- Codex CLI installed and logged in
+- Codex installed and working on your machine
 - A modern browser
-
-Check Codex login:
-
-```bash
-codex login
-codex login status
-```
-
-On Windows, make sure `codex`, `codex.cmd`, or `codex.exe` works in PowerShell/CMD. If it does not, open the app settings and set the full Codex CLI path.
 
 ## Run On macOS / Linux
 
