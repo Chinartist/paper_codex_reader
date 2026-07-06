@@ -59,10 +59,25 @@ DEFAULT_HOME = default_home()
 
 def codex_candidates() -> List[str]:
     candidates = [
-        shutil.which("codex") or "",
-        shutil.which("codex.cmd") or "",
-        shutil.which("codex.exe") or "",
+        os.environ.get("PAPER_CODEX_READER_CODEX") or "",
     ]
+    if sys.platform.startswith("win"):
+        candidates += [
+            shutil.which("codex.cmd") or "",
+            shutil.which("codex.bat") or "",
+            shutil.which("codex.exe") or "",
+            shutil.which("codex") or "",
+        ]
+        app_data = pathlib.Path(os.environ.get("APPDATA") or pathlib.Path.home() / "AppData" / "Roaming")
+        local_app_data = pathlib.Path(os.environ.get("LOCALAPPDATA") or pathlib.Path.home() / "AppData" / "Local")
+        candidates += [
+            str(app_data / "npm" / "codex.cmd"),
+            str(local_app_data / "pnpm" / "codex.cmd"),
+        ]
+    else:
+        candidates += [
+            shutil.which("codex") or "",
+        ]
     if sys.platform == "darwin":
         candidates += [
             "/Applications/Codex.app/Contents/Resources/codex",
@@ -113,6 +128,32 @@ def path_exists_or_command(value: str) -> bool:
     if not value:
         return False
     return bool(shutil.which(value) or pathlib.Path(value).expanduser().exists())
+
+
+def codex_unavailable_message(path: str, detail: str) -> str:
+    message = f"Codex CLI is not usable at {path}: {detail}"
+    if sys.platform.startswith("win"):
+        message += (
+            " On Windows, a Codex path under WindowsApps can exist but still be blocked "
+            "from subprocesses. Install a runnable CLI such as `npm install -g @openai/codex`, "
+            "then set the Codex path to codex.cmd if needed."
+        )
+    return message
+
+
+def probe_codex_cli(path: str, timeout: int = 10) -> Tuple[bool, str]:
+    if not path_exists_or_command(path):
+        return False, f"Codex CLI not found: {path}"
+    try:
+        result = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return False, codex_unavailable_message(path, "timed out while running --version")
+    except Exception as exc:
+        return False, codex_unavailable_message(path, str(exc))
+    output = (result.stdout or result.stderr).strip()
+    if result.returncode == 0:
+        return True, output
+    return False, codex_unavailable_message(path, output or f"exit code {result.returncode}")
 
 
 def codex_home() -> pathlib.Path:
@@ -434,7 +475,8 @@ class Store:
 
     def find_codex_path(self) -> str:
         for path in codex_candidates():
-            if path_exists_or_command(path):
+            ok, _message = probe_codex_cli(path)
+            if ok:
                 return path
         return "codex"
 
@@ -791,25 +833,35 @@ class CodexRunner:
         settings = self.store.settings()
         return settings.get("codex_path") or "codex"
 
+    def _ensure_cli(self, path: str) -> None:
+        ok, message = probe_codex_cli(path)
+        if not ok:
+            raise ValueError(message)
+
     def status(self) -> Dict[str, Any]:
         path = self._configured_path()
+        path_exists = path_exists_or_command(path)
+        version_ok, version_message = probe_codex_cli(path)
         result = {
             "path": path,
-            "exists": path_exists_or_command(path),
+            "exists": version_ok,
+            "path_exists": path_exists,
+            "usable": version_ok,
             "platform": sys.platform,
             "data_home": str(self.store.home),
         }
-        try:
-            version = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=10)
-            result["version"] = (version.stdout or version.stderr).strip()
-        except Exception as exc:
-            result["version_error"] = str(exc)
-        try:
-            login = subprocess.run([path, "login", "status"], capture_output=True, text=True, timeout=20)
-            result["login_status"] = (login.stdout or login.stderr).strip()
-            result["login_ok"] = login.returncode == 0
-        except Exception as exc:
-            result["login_status"] = str(exc)
+        if version_ok:
+            result["version"] = version_message
+            try:
+                login = subprocess.run([path, "login", "status"], capture_output=True, text=True, timeout=20)
+                result["login_status"] = (login.stdout or login.stderr).strip()
+                result["login_ok"] = login.returncode == 0
+            except Exception as exc:
+                result["login_status"] = str(exc)
+                result["login_ok"] = False
+        else:
+            result["version_error"] = version_message
+            result["login_status"] = version_message
             result["login_ok"] = False
         result["account"] = safe_codex_account_info()
         result["usage"] = latest_codex_usage()
@@ -817,8 +869,7 @@ class CodexRunner:
 
     def login(self) -> Dict[str, Any]:
         path = self._configured_path()
-        if not path_exists_or_command(path):
-            raise ValueError(f"Codex CLI not found: {path}")
+        self._ensure_cli(path)
         popen_kwargs: Dict[str, Any] = {
             "stdin": subprocess.DEVNULL,
             "stdout": subprocess.DEVNULL,
@@ -837,8 +888,7 @@ class CodexRunner:
 
     def logout(self) -> Dict[str, Any]:
         path = self._configured_path()
-        if not path_exists_or_command(path):
-            raise ValueError(f"Codex CLI not found: {path}")
+        self._ensure_cli(path)
         result = subprocess.run([path, "logout"], capture_output=True, text=True, timeout=30)
         output = (result.stdout or result.stderr).strip()
         if result.returncode != 0:
@@ -857,6 +907,7 @@ class CodexRunner:
     def _base_options(self) -> Tuple[str, List[str], int]:
         settings = self.store.settings()
         path = settings.get("codex_path") or "codex"
+        self._ensure_cli(path)
         model = (settings.get("model") or DEFAULT_MODEL).strip()
         effort = settings.get("reasoning_effort", "high").strip()
         verbosity = settings.get("verbosity", "medium").strip()

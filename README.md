@@ -36,6 +36,10 @@ cd paper_codex_reader
 .\run.ps1
 ```
 
+If Codex login fails on Windows with an `Access is denied` error, see
+[WINDOWS.md](WINDOWS.md). Some Windows app package paths can be discovered by
+the system but cannot be launched by this local Python server.
+
 Or in CMD:
 
 ```bat
