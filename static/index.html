@@ -109,13 +109,6 @@
           </label>
         </div>
       </div>
-      <div id="queuePanel" class="queue-panel hidden">
-        <div class="queue-head">
-          <strong>任务队列</strong>
-          <span id="queueCount">0</span>
-        </div>
-        <div id="taskList" class="task-list"></div>
-      </div>
       <div id="workStatus" class="work-status hidden">
         <span class="pulse-dot"></span>
         <span id="workStatusText">Codex 正在处理...</span>
@@ -157,6 +150,13 @@
             <button id="clearContextBtn" class="small-btn secondary-btn" type="button">清空</button>
           </div>
           <div id="contextList" class="context-list"></div>
+        </div>
+        <div id="queuePanel" class="queue-panel hidden" aria-label="发送队列">
+          <div class="queue-head">
+            <strong>发送队列</strong>
+            <span id="queueCount">0</span>
+          </div>
+          <div id="taskList" class="task-list"></div>
         </div>
         <textarea id="messageInput" rows="4" placeholder="向 Codex 提问..."></textarea>
         <div class="composer-actions">

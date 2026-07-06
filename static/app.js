@@ -1315,13 +1315,20 @@ function renderTasks() {
       item.tabIndex = 0;
       item.title = "拖动调整排队顺序";
     }
+    const status = taskStatusText(task.status);
+    const title = taskQueueTitle(task);
+    const meta = conv ? conv.title : status;
     item.innerHTML = `
-      <span class="task-grip" aria-hidden="true"></span>
-      <div>
-        <strong>${escapeHtml(task.label || task.kind)}</strong>
-        <span>${escapeHtml(taskStatusText(task.status))}${conv ? ` · ${escapeHtml(conv.title)}` : ""}</span>
+      <span class="task-leading-icon" aria-hidden="true"></span>
+      <div class="task-copy">
+        <strong>${escapeHtml(title)}</strong>
+        <span>${escapeHtml(status)}${meta && meta !== status ? ` · ${escapeHtml(meta)}` : ""}</span>
       </div>
-      <button class="small-btn danger-btn" type="button" data-task-id="${escapeHtml(task.id)}">取消</button>
+      <div class="task-actions">
+        <button class="task-guide-btn" type="button" data-conversation-id="${escapeHtml(task.conversation_id || "")}">引导</button>
+        <button class="task-cancel-btn" type="button" data-task-id="${escapeHtml(task.id)}" aria-label="取消任务" title="取消任务"></button>
+        <button class="task-more-btn" type="button" aria-label="更多" title="更多"></button>
+      </div>
     `;
     if (task.can_reorder) {
       item.addEventListener("dragstart", handleTaskDragStart);
@@ -1330,10 +1337,19 @@ function renderTasks() {
       item.addEventListener("dragend", handleTaskDragEnd);
       item.addEventListener("keydown", handleTaskKeyboardReorder);
     }
-    item.querySelector("button").addEventListener("click", () => cancelTask(task.id));
+    item.querySelector(".task-guide-btn").addEventListener("click", () => {
+      if (task.conversation_id) selectConversation(task.conversation_id);
+    });
+    item.querySelector(".task-cancel-btn").addEventListener("click", () => cancelTask(task.id));
     list.appendChild(item);
   }
   updateButtons();
+}
+
+function taskQueueTitle(task) {
+  const label = (task.label || task.kind || "").trim();
+  if (!label) return "发送到 Codex";
+  return label.replace(/^提问：/, "").replace(/^读全文：/, "读全文 · ");
 }
 
 function activeTaskIdsFromDom() {
