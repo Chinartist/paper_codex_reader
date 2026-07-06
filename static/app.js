@@ -456,11 +456,13 @@ function renderPaperDetail() {
       <button type="button" id="openSelectedPaperBtn">打开阅读</button>
       <button type="button" id="newSelectedPaperConversationBtn" class="secondary-btn">新对话</button>
       <button type="button" id="renameSelectedPaperBtn" class="secondary-btn">重命名</button>
+      <button type="button" id="deleteSelectedPaperBtn" class="danger-btn">删除副本</button>
     </div>
   `;
   $("openSelectedPaperBtn").addEventListener("click", () => openLibraryPaper(paper.id, false));
   $("newSelectedPaperConversationBtn").addEventListener("click", () => openLibraryPaper(paper.id, true));
   $("renameSelectedPaperBtn").addEventListener("click", () => openRenamePaper(paper.id));
+  $("deleteSelectedPaperBtn").addEventListener("click", () => deletePaper(paper.id));
 }
 
 async function openLibraryPaper(paperId, createConversation) {
@@ -508,6 +510,43 @@ async function savePaperTitle() {
     toast("论文名称已更新");
   } catch (error) {
     toast(error.message, 7000);
+  }
+}
+
+async function deletePaper(paperId) {
+  const paper = state.papers.find((item) => item.id === paperId);
+  if (!paper) return;
+  const confirmed = window.confirm(
+    `删除论文“${paper.title}”的本地副本？\n\n这会从论文库移除它，并删除软件数据目录里的 PDF 副本；不会删除你最初导入时的原始文件。`
+  );
+  if (!confirmed) return;
+  try {
+    await api(`/api/papers/${paperId}`, { method: "DELETE" });
+    state.papers = state.papers.filter((item) => item.id !== paperId);
+    state.selectedLibraryPaperId = null;
+    if (state.activePaper?.id === paperId) {
+      state.activePaper = null;
+      state.pdfDoc = null;
+      state.pdfUrl = "";
+      $("activePaperTitle").textContent = "未选择论文";
+      $("activeConversationTitle").textContent = state.activeConversation ? ` · ${state.activeConversation.title}` : "";
+      $("pdfViewer").innerHTML = `
+        <div class="empty-state">
+          <h2>打开论文库选择 PDF</h2>
+          <p>也可以先在右侧新建空对话，直接向 Codex 提问。</p>
+        </div>
+      `;
+      clearSelection();
+      clearConversationSelections();
+    }
+    await loadConversations();
+    renderPapers();
+    renderConversations();
+    updateContextHint();
+    updateButtons();
+    toast("论文副本已删除");
+  } catch (error) {
+    toast(error.message, 9000);
   }
 }
 

@@ -99,6 +99,7 @@ file:///C:/Users/me/Documents/paper.pdf
 - Import papers from local PDF paths, uploaded files, or direct PDF links.
 - Search and sort papers in the paper library.
 - Rename a paper display title without changing the source PDF file.
+- Delete the app's local PDF copy from the paper library.
 - Keep paper metadata, extracted text, conversations, and settings in the local data directory.
 
 ### PDF Reader

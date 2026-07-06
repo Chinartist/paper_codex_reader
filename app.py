@@ -340,6 +340,26 @@ class Store:
             raise ValueError("Paper not found.")
         return paper
 
+    def delete_paper(self, paper_id: str) -> Dict[str, Any]:
+        paper = self.get_paper(paper_id)
+        if not paper:
+            raise ValueError("Paper not found.")
+        path = pathlib.Path(paper["path"]).expanduser()
+        deleted_file = False
+        try:
+            resolved_path = path.resolve()
+            resolved_papers_dir = self.papers_dir.resolve()
+            if resolved_path.exists() and resolved_papers_dir in resolved_path.parents:
+                resolved_path.unlink()
+                deleted_file = True
+        except FileNotFoundError:
+            pass
+        except Exception as exc:
+            raise ValueError(f"Could not delete local PDF copy: {exc}") from exc
+        with self.connect() as con:
+            con.execute("delete from papers where id = ?", (paper_id,))
+        return {"id": paper_id, "title": paper["title"], "deleted": True, "deleted_file": deleted_file}
+
     def add_paper_from_path(self, source_path: str, title: Optional[str] = None) -> Dict[str, Any]:
         src = clean_local_path(source_path)
         if not src.exists():
@@ -1181,7 +1201,10 @@ class AppHandler(SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         try:
-            if path.startswith("/api/conversations/") and path.count("/") == 3:
+            if path.startswith("/api/papers/") and path.count("/") == 3:
+                paper_id = path.split("/")[3]
+                json_response(self, self.store.delete_paper(paper_id))
+            elif path.startswith("/api/conversations/") and path.count("/") == 3:
                 conv_id = path.split("/")[3]
                 if self.tasks.has_active_conversation_tasks(conv_id):
                     json_response(self, {"error": "This conversation still has running or queued tasks. Cancel them first."}, 409)
