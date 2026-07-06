@@ -194,6 +194,88 @@ def latest_codex_usage() -> Dict[str, Any]:
     return {"available": False, "message": "No recent Codex token usage event found."}
 
 
+SENSITIVE_AUTH_KEY_PARTS = ("token", "secret", "key", "credential", "authorization", "cookie")
+SAFE_ACCOUNT_FIELDS = {
+    "email": "email",
+    "user_email": "email",
+    "account_email": "email",
+    "name": "name",
+    "display_name": "name",
+    "account_name": "name",
+    "account_id": "account_id",
+    "user_id": "user_id",
+    "organization_id": "organization_id",
+    "org_id": "organization_id",
+}
+
+
+def auth_mode_label(value: Any) -> Optional[str]:
+    if not value:
+        return None
+    mode = str(value).strip()
+    normalized = mode.lower().replace("-", "_")
+    if normalized == "chatgpt":
+        return "ChatGPT 账号"
+    if "api" in normalized:
+        return "API Key"
+    return mode
+
+
+def safe_codex_account_info() -> Dict[str, Any]:
+    auth_path = codex_home() / "auth.json"
+    if not auth_path.exists():
+        return {"available": False, "message": "No local Codex auth metadata found."}
+    try:
+        data = json.loads(auth_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {"available": False, "message": f"Unable to read Codex auth metadata: {exc}"}
+    if not isinstance(data, dict):
+        return {"available": False, "message": "Codex auth metadata has an unexpected shape."}
+
+    found: Dict[str, str] = {}
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            for raw_key, raw_value in value.items():
+                key = str(raw_key).lower()
+                if any(part in key for part in SENSITIVE_AUTH_KEY_PARTS):
+                    continue
+                canonical = SAFE_ACCOUNT_FIELDS.get(key)
+                if canonical and isinstance(raw_value, (str, int, float)):
+                    text = str(raw_value).strip()
+                    if text and len(text) <= 160:
+                        found.setdefault(canonical, text)
+                if isinstance(raw_value, (dict, list)):
+                    visit(raw_value)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, (dict, list)):
+                    visit(item)
+
+    visit(data)
+    auth_mode = str(data.get("auth_mode") or "").strip() or None
+    last_refresh = data.get("last_refresh") if isinstance(data.get("last_refresh"), str) else None
+    display = (
+        found.get("email")
+        or found.get("name")
+        or found.get("account_id")
+        or auth_mode_label(auth_mode)
+    )
+    return {
+        "available": True,
+        "source": "local_codex_auth_metadata",
+        "display": display,
+        "auth_mode": auth_mode,
+        "auth_label": auth_mode_label(auth_mode),
+        "email": found.get("email"),
+        "name": found.get("name"),
+        "account_id": found.get("account_id"),
+        "user_id": found.get("user_id"),
+        "organization_id": found.get("organization_id"),
+        "last_refresh": last_refresh,
+    }
+
+
 def json_response(handler: SimpleHTTPRequestHandler, payload: Any, status: int = 200) -> None:
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     handler.send_response(status)
@@ -633,6 +715,7 @@ class CodexRunner:
         except Exception as exc:
             result["login_status"] = str(exc)
             result["login_ok"] = False
+        result["account"] = safe_codex_account_info()
         result["usage"] = latest_codex_usage()
         return result
 

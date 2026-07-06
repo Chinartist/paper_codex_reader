@@ -707,12 +707,16 @@ body.chat-collapsed .chat-edge-toggle {
 
 .codex-status {
   display: grid;
-  gap: 2px;
+  gap: 3px;
+  min-width: 0;
 }
 
 .codex-status strong {
   color: var(--sidebar-text);
   font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .codex-status span {
@@ -720,6 +724,14 @@ body.chat-collapsed .chat-edge-toggle {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.codex-status .account-detail {
+  color: rgba(213, 232, 255, 0.82);
+}
+
+.codex-status .codex-version {
+  font-size: 11px;
 }
 
 .usage-peek {
