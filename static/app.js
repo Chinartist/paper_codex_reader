@@ -1093,7 +1093,22 @@ function handleSelection() {
   state.selectedText = text;
   state.selectedPage = pageNode ? pageNode.dataset.page : null;
   $("selectionMeta").textContent = `${text.length} 字符${state.selectedPage ? ` · 第 ${state.selectedPage} 页` : ""}`;
+  positionSelectionBox(selection);
   $("selectionBox").classList.remove("hidden");
+}
+
+function positionSelectionBox(selection) {
+  if (!selection || !selection.rangeCount) return;
+  const range = selection.getRangeAt(0);
+  const rects = Array.from(range.getClientRects()).filter((rect) => rect.width && rect.height);
+  const rect = rects[0] || range.getBoundingClientRect();
+  if (!rect || (!rect.width && !rect.height)) return;
+  const box = $("selectionBox");
+  const left = Math.min(Math.max(rect.left + rect.width / 2, 18), window.innerWidth - 18);
+  const topAbove = rect.top - 42;
+  const top = topAbove >= 8 ? topAbove : rect.bottom + 8;
+  box.style.left = `${left}px`;
+  box.style.top = `${top}px`;
 }
 
 function addSelectionToConversation() {
@@ -1256,6 +1271,8 @@ function clearSelection() {
   state.selectedText = "";
   state.selectedPage = null;
   $("selectionBox").classList.add("hidden");
+  $("selectionBox").style.removeProperty("left");
+  $("selectionBox").style.removeProperty("top");
   const sel = window.getSelection();
   if (sel) {
     sel.removeAllRanges();
