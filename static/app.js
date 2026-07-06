@@ -11,6 +11,8 @@ const DEFAULT_PROMPT_TEMPLATES = [
   },
 ];
 
+const CONVERSATION_DRAFTS_KEY = "paperCodexConversationDrafts";
+
 const state = {
   papers: [],
   conversations: [],
@@ -44,6 +46,7 @@ const state = {
   sidebarCollapsed: localStorage.getItem("paperCodexSidebarCollapsed") === "true",
   chatCollapsed: localStorage.getItem("paperCodexChatCollapsed") === "true",
   promptTemplates: loadPromptTemplates(),
+  conversationDrafts: loadConversationDrafts(),
   editingPromptId: null,
   selectionPositionFrame: 0,
   draggingTaskId: null,
@@ -255,6 +258,76 @@ function accountTooltip(status) {
   }
   if (status.version) rows.push(status.version);
   return rows.join("\n");
+}
+
+function loadConversationDrafts() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CONVERSATION_DRAFTS_KEY) || "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).map(([key, draft]) => [
+        key,
+        {
+          message: typeof draft?.message === "string" ? draft.message : "",
+          snippets: Array.isArray(draft?.snippets)
+            ? draft.snippets
+                .filter((item) => item && typeof item.text === "string")
+                .map((item) => ({
+                  id: item.id || makeId(),
+                  text: item.text,
+                  page: Number.isFinite(Number(item.page)) ? Number(item.page) : null,
+                }))
+            : [],
+        },
+      ])
+    );
+  } catch {
+    return {};
+  }
+}
+
+function activeDraftKey() {
+  return state.activeConversation?.id ? `conversation:${state.activeConversation.id}` : null;
+}
+
+function draftIsEmpty(draft) {
+  return !draft || (!draft.message?.trim() && !draft.snippets?.length);
+}
+
+function persistConversationDrafts() {
+  const clean = Object.fromEntries(
+    Object.entries(state.conversationDrafts).filter(([, draft]) => !draftIsEmpty(draft))
+  );
+  state.conversationDrafts = clean;
+  try {
+    localStorage.setItem(CONVERSATION_DRAFTS_KEY, JSON.stringify(clean));
+  } catch {
+    // Drafts are a convenience layer; storage failures should not block chatting.
+  }
+}
+
+function saveActiveConversationDraft() {
+  const key = activeDraftKey();
+  if (!key) return;
+  state.conversationDrafts[key] = {
+    message: $("messageInput")?.value || "",
+    snippets: state.selectedSnippets.map((item) => ({ ...item })),
+  };
+  persistConversationDrafts();
+}
+
+function restoreActiveConversationDraft() {
+  const key = activeDraftKey();
+  const draft = key ? state.conversationDrafts[key] : null;
+  $("messageInput").value = draft?.message || "";
+  state.selectedSnippets = draft?.snippets ? draft.snippets.map((item) => ({ ...item })) : [];
+  renderSelectedContexts();
+}
+
+function clearDraftForConversation(conversationId) {
+  if (!conversationId) return;
+  delete state.conversationDrafts[`conversation:${conversationId}`];
+  persistConversationDrafts();
 }
 
 function usageWindowRow(label, limit) {
@@ -1037,9 +1110,12 @@ async function deleteConversation(conversationId) {
     await api(`/api/conversations/${conversationId}`, {
       method: "DELETE",
     });
+    clearDraftForConversation(conversationId);
     if (state.activeConversation?.id === conversationId) {
       state.activeConversation = null;
       $("activeConversationTitle").textContent = "";
+      $("messageInput").value = "";
+      clearConversationSelections({ persist: false });
     }
     await loadConversations();
     if (!state.activeConversation) {
@@ -1081,7 +1157,7 @@ async function ensureConversation() {
 }
 
 async function selectConversation(convId) {
-  clearConversationSelections();
+  saveActiveConversationDraft();
   clearSelection();
   state.activeConversation = state.conversations.find((conv) => conv.id === convId) || null;
   renderConversations();
@@ -1089,6 +1165,7 @@ async function selectConversation(convId) {
     ? ` · ${state.activeConversation.title}`
     : "";
   await loadMessages();
+  restoreActiveConversationDraft();
   updateContextHint();
   updateButtons();
 }
@@ -1173,6 +1250,8 @@ async function sendMessage() {
   const localVisible = formatLocalVisibleMessage(content, snippets);
   appendMessage("user", localVisible);
   clearSelection();
+  clearConversationSelections({ persist: false });
+  clearDraftForConversation(convId);
   scrollMessages();
   try {
     await api(`/api/conversations/${convId}/messages`, {
@@ -1182,7 +1261,6 @@ async function sendMessage() {
     await loadConversations();
     await loadTasks({ silent: true });
     updateContextHint();
-    clearConversationSelections();
     toast("问题已加入队列");
   } catch (error) {
     if (state.activeConversation?.id === convId) {
@@ -1686,6 +1764,7 @@ function addSelectionToConversation() {
     page: state.selectedPage,
   });
   renderSelectedContexts();
+  saveActiveConversationDraft();
   clearSelection();
   $("messageInput").focus();
   toast(`已添加 ${state.selectedSnippets.length} 处选区`);
@@ -1715,11 +1794,15 @@ function renderSelectedContexts() {
 function removeSelectedContext(id) {
   state.selectedSnippets = state.selectedSnippets.filter((item) => item.id !== id);
   renderSelectedContexts();
+  saveActiveConversationDraft();
 }
 
-function clearConversationSelections() {
+function clearConversationSelections({ persist = true } = {}) {
   state.selectedSnippets = [];
   renderSelectedContexts();
+  if (persist) {
+    saveActiveConversationDraft();
+  }
 }
 
 function loadPromptTemplates() {
@@ -1771,6 +1854,7 @@ function usePromptTemplate(promptId) {
   const prompt = state.promptTemplates.find((item) => item.id === promptId);
   if (!prompt) return;
   $("messageInput").value = prompt.prompt;
+  saveActiveConversationDraft();
   $("messageInput").focus();
 }
 
@@ -2089,6 +2173,7 @@ function bindEvents() {
   $("newConversationBtn").addEventListener("click", newConversation);
   $("initializeBtn").addEventListener("click", initializeConversation);
   $("sendBtn").addEventListener("click", sendMessage);
+  $("messageInput").addEventListener("input", saveActiveConversationDraft);
   $("messageInput").addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
