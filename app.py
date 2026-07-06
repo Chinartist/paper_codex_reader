@@ -776,10 +776,11 @@ def init_prompt(title: str, content: str, index: int, total: int, final: bool) -
 def selected_text_prompt(title: str, selected_text: str, user_note: str = "") -> str:
     note = f"\n\n用户补充问题：\n{user_note.strip()}" if user_note.strip() else ""
     return (
-        "请基于当前论文对话上下文处理我选中的这段内容。"
-        "输出严格限制为两段：第一段只做忠实中文翻译；第二段做简短分析，说明这段话的核心意思和在论文中的作用。"
-        "除非用户补充问题明确要求更多细节，否则不要展开成长篇解释、不要列项目符号。"
-        f"\n\n论文：{title}\n\n选中文本：\n{selected_text.strip()}{note}"
+        "请基于当前论文对话上下文处理我添加到对话的论文选区。"
+        "如果只有一个选区，输出严格限制为两段：第一段只做忠实中文翻译；第二段做简短分析，说明这段话的核心意思和在论文中的作用。"
+        "如果有多个选区，请按选区顺序处理，每个选区仍然只保留“翻译”和“简短分析”两段。"
+        "除非用户补充问题明确要求更多细节，否则不要展开成长篇解释。"
+        f"\n\n论文：{title}\n\n论文选区：\n{selected_text.strip()}{note}"
     )
 
 

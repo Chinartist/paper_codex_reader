@@ -1113,6 +1113,87 @@ body.resizing-chat {
   margin-top: 2px;
 }
 
+.context-tray {
+  grid-column: 1 / -1;
+  border: 1px solid #c9d7f5;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+  border-radius: var(--radius-lg);
+  padding: 10px;
+  display: grid;
+  gap: 9px;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
+}
+
+.context-tray-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.context-tray-head strong {
+  color: #1e3a8a;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.context-list {
+  max-height: 148px;
+  overflow: auto;
+  display: grid;
+  gap: 7px;
+}
+
+.context-chip {
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(147, 197, 253, 0.85);
+  background: rgba(255, 255, 255, 0.84);
+  border-radius: var(--radius-md);
+  padding: 8px 8px 8px 10px;
+}
+
+.context-chip-main {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.context-chip-main strong,
+.context-chip-main span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-chip-main strong {
+  color: #1d4ed8;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.context-chip-main span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.remove-context-btn {
+  width: 30px;
+  height: 30px;
+  color: #64748b;
+  background: transparent;
+  box-shadow: none;
+}
+
+.remove-context-btn:hover {
+  color: var(--danger);
+  background: #fff1f2;
+}
+
 .composer {
   position: relative;
   border-top: 1px solid var(--border);

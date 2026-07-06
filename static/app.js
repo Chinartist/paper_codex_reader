@@ -18,6 +18,7 @@ const state = {
   activeConversation: null,
   selectedText: "",
   selectedPage: null,
+  selectedSnippets: [],
   selectedFile: null,
   settings: {},
   busy: false,
@@ -421,6 +422,7 @@ async function importPaper() {
 
 async function selectPaper(paperId) {
   resetShellScroll();
+  clearConversationSelections();
   state.activePaper = state.papers.find((paper) => paper.id === paperId) || null;
   state.selectedLibraryPaperId = state.activePaper?.id || state.selectedLibraryPaperId;
   renderPapers();
@@ -630,6 +632,8 @@ async function ensureConversation() {
 }
 
 async function selectConversation(convId) {
+  clearConversationSelections();
+  clearSelection();
   state.activeConversation = state.conversations.find((conv) => conv.id === convId) || null;
   renderConversations();
   $("activeConversationTitle").textContent = state.activeConversation
@@ -703,21 +707,21 @@ async function initializeConversation() {
 
 async function sendMessage() {
   const content = $("messageInput").value.trim();
-  if (!content && !state.selectedText) {
-    toast("请输入问题，或先选中一段论文文本");
+  const snippets = [...state.selectedSnippets];
+  const selectedText = buildSelectedText(snippets);
+  if (!content && !selectedText) {
+    toast("请输入问题，或先添加一段论文选区");
     return;
   }
   await ensureConversation();
   const convId = state.activeConversation.id;
   const payload = {
     content,
-    selected_text: state.selectedText,
+    selected_text: selectedText,
     paper_id: state.activePaper ? state.activePaper.id : null,
   };
   $("messageInput").value = "";
-  const localVisible = state.selectedText
-    ? (content ? `${content}\n\n> 选中文本：\n${state.selectedText}` : `解释选中文本：\n${state.selectedText}`)
-    : content;
+  const localVisible = formatLocalVisibleMessage(content, snippets);
   appendMessage("user", localVisible);
   clearSelection();
   scrollMessages();
@@ -729,6 +733,7 @@ async function sendMessage() {
     await loadConversations();
     await loadTasks({ silent: true });
     updateContextHint();
+    clearConversationSelections();
     toast("问题已加入队列");
   } catch (error) {
     if (state.activeConversation?.id === convId) {
@@ -1091,12 +1096,56 @@ function handleSelection() {
   $("selectionBox").classList.remove("hidden");
 }
 
-function useSelectionPrompt() {
+function addSelectionToConversation() {
   if (!state.selectedText) {
     return;
   }
-  $("messageInput").value = "请先翻译，再简短分析。";
+  const duplicate = state.selectedSnippets.some((item) => item.text === state.selectedText && item.page === state.selectedPage);
+  if (duplicate) {
+    toast("这处选区已经添加过");
+    clearSelection();
+    return;
+  }
+  state.selectedSnippets.push({
+    id: makeId(),
+    text: state.selectedText,
+    page: state.selectedPage,
+  });
+  renderSelectedContexts();
+  clearSelection();
   $("messageInput").focus();
+  toast(`已添加 ${state.selectedSnippets.length} 处选区`);
+}
+
+function renderSelectedContexts() {
+  const tray = $("contextTray");
+  const list = $("contextList");
+  const count = state.selectedSnippets.length;
+  tray.classList.toggle("hidden", count === 0);
+  $("contextTrayTitle").textContent = `已添加 ${count} 处选区`;
+  list.innerHTML = "";
+  for (const [index, item] of state.selectedSnippets.entries()) {
+    const node = document.createElement("div");
+    node.className = "context-chip";
+    node.innerHTML = `
+      <div class="context-chip-main">
+        <strong>${escapeHtml(selectionLabel(item, index))}</strong>
+        <span>${escapeHtml(compactText(item.text, 140))}</span>
+      </div>
+      <button class="icon-btn remove-context-btn" type="button" data-context-id="${escapeHtml(item.id)}" aria-label="移除选区" title="移除选区">×</button>
+    `;
+    list.appendChild(node);
+  }
+}
+
+function removeSelectedContext(id) {
+  state.selectedSnippets = state.selectedSnippets.filter((item) => item.id !== id);
+  renderSelectedContexts();
+}
+
+function clearConversationSelections() {
+  state.selectedSnippets = [];
+  renderSelectedContexts();
 }
 
 function loadPromptTemplates() {
@@ -1211,6 +1260,33 @@ function clearSelection() {
   if (sel) {
     sel.removeAllRanges();
   }
+}
+
+function buildSelectedText(snippets = state.selectedSnippets) {
+  return snippets
+    .map((item, index) => `[${selectionLabel(item, index)}]\n${item.text.trim()}`)
+    .join("\n\n");
+}
+
+function formatLocalVisibleMessage(content, snippets) {
+  const selectedText = buildSelectedText(snippets);
+  if (!selectedText) return content;
+  return content
+    ? `${content}\n\n> 已添加论文选区：\n${selectedText}`
+    : `解释已添加的论文选区：\n${selectedText}`;
+}
+
+function selectionLabel(item, index) {
+  return `选区 ${index + 1}${item.page ? ` · 第 ${item.page} 页` : ""}`;
+}
+
+function compactText(value, limit = 120) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  return text.length > limit ? `${text.slice(0, limit)}...` : text;
+}
+
+function makeId() {
+  return window.crypto && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function updateButtons() {
@@ -1440,7 +1516,14 @@ function bindEvents() {
     }
   });
   $("pdfViewer").addEventListener("mouseup", () => window.setTimeout(handleSelection, 20));
-  $("useSelectionBtn").addEventListener("click", useSelectionPrompt);
+  $("addSelectionBtn").addEventListener("click", addSelectionToConversation);
+  $("clearContextBtn").addEventListener("click", clearConversationSelections);
+  $("contextList").addEventListener("click", (event) => {
+    const button = event.target.closest(".remove-context-btn");
+    if (button) {
+      removeSelectedContext(button.dataset.contextId);
+    }
+  });
   $("addPromptBtn").addEventListener("click", () => openPromptForm());
   $("promptForm").addEventListener("submit", savePromptTemplate);
   $("cancelPromptBtn").addEventListener("click", closePromptForm);

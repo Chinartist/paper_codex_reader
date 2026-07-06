@@ -121,7 +121,7 @@
           <strong>已选中文本</strong>
           <span id="selectionMeta"></span>
         </div>
-        <button id="useSelectionBtn" class="small-btn">生成提问</button>
+        <button id="addSelectionBtn" class="small-btn">添加到对话</button>
       </div>
       <div class="composer">
         <label class="sr-only" for="messageInput">向 Codex 提问</label>
@@ -148,6 +148,13 @@
               </div>
             </form>
           </section>
+        </div>
+        <div id="contextTray" class="context-tray hidden" aria-label="已添加的论文选区">
+          <div class="context-tray-head">
+            <strong id="contextTrayTitle">已添加 0 处选区</strong>
+            <button id="clearContextBtn" class="small-btn secondary-btn" type="button">清空</button>
+          </div>
+          <div id="contextList" class="context-list"></div>
         </div>
         <textarea id="messageInput" rows="4" placeholder="向 Codex 提问..."></textarea>
         <div class="composer-actions">
