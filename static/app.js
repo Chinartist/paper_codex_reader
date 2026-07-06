@@ -237,31 +237,9 @@ function formatTime(value) {
   return date.toLocaleString("zh-CN", { hour12: false });
 }
 
-function formatAuthMode(value) {
-  if (!value) return "未知认证";
-  const normalized = String(value).toLowerCase().replace(/-/g, "_");
-  if (normalized === "chatgpt") return "ChatGPT";
-  if (normalized.includes("api")) return "API Key";
-  return value;
-}
-
 function accountDisplayName(account) {
   if (!account?.available) return "";
-  return account.display || account.email || account.name || account.account_id || account.auth_label || "";
-}
-
-function accountDetailLine(account, status) {
-  if (!status.login_ok) {
-    return status.login_status || status.version || status.version_error || "未找到账号信息";
-  }
-  if (!account?.available) {
-    return status.login_status || status.version || status.version_error || "未找到账号信息";
-  }
-  const details = [];
-  if (account.auth_mode) details.push(`认证 ${formatAuthMode(account.auth_mode)}`);
-  if (account.organization_id) details.push(`组织 ${account.organization_id}`);
-  if (account.last_refresh) details.push(`刷新 ${formatTime(account.last_refresh)}`);
-  return details.join(" · ") || account.source || "本地 Codex 账号";
+  return account.masked_email || account.display || account.name || account.account_id || account.auth_label || "";
 }
 
 function accountTooltip(status) {
@@ -271,13 +249,7 @@ function accountTooltip(status) {
   if (account.available) {
     const name = accountDisplayName(account);
     if (name) rows.push(`账号：${name}`);
-    if (account.email && account.email !== name) rows.push(`邮箱：${account.email}`);
     if (account.name && account.name !== name) rows.push(`名称：${account.name}`);
-    if (account.auth_mode) rows.push(`认证方式：${formatAuthMode(account.auth_mode)}`);
-    if (account.user_id) rows.push(`用户 ID：${account.user_id}`);
-    if (account.account_id) rows.push(`账号 ID：${account.account_id}`);
-    if (account.organization_id) rows.push(`组织 ID：${account.organization_id}`);
-    if (account.last_refresh) rows.push(`最近刷新：${formatTime(account.last_refresh)}`);
   } else if (account.message) {
     rows.push(account.message);
   }
@@ -360,10 +332,8 @@ async function loadStatus() {
   const login = status.login_ok ? "已登录" : "未确认登录";
   const exists = Boolean(status.exists);
   const accountName = status.login_ok ? accountDisplayName(status.account) : "";
-  const detail = accountDetailLine(status.account, status);
   $("codexStatus").innerHTML = `
     <strong>${escapeHtml(accountName ? `${login} · ${accountName}` : login)}</strong>
-    <span class="account-detail">${escapeHtml(detail)}</span>
     <span class="codex-version">${escapeHtml(status.version || status.version_error || "未找到版本")}</span>
   `;
   $("codexStatus").title = accountTooltip(status);

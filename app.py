@@ -195,6 +195,7 @@ def latest_codex_usage() -> Dict[str, Any]:
 
 
 SENSITIVE_AUTH_KEY_PARTS = ("token", "secret", "key", "credential", "authorization", "cookie")
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 SAFE_ACCOUNT_FIELDS = {
     "email": "email",
     "user_email": "email",
@@ -207,6 +208,78 @@ SAFE_ACCOUNT_FIELDS = {
     "organization_id": "organization_id",
     "org_id": "organization_id",
 }
+
+
+def mask_email(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    email = value.strip()
+    if not EMAIL_PATTERN.match(email):
+        return None
+    local, domain = email.split("@", 1)
+    if len(local) <= 1:
+        masked_local = "*"
+    elif len(local) <= 3:
+        masked_local = f"{local[0]}***"
+    else:
+        masked_local = f"{local[:2]}***{local[-1]}"
+    if "." in domain:
+        first, rest = domain.split(".", 1)
+        masked_domain = f"{first[:1]}***.{rest}" if first else f"***.{rest}"
+    else:
+        masked_domain = f"{domain[:1]}***" if domain else "***"
+    return f"{masked_local}@{masked_domain}"
+
+
+def decode_jwt_payload(value: str) -> Optional[Dict[str, Any]]:
+    parts = value.split(".")
+    if len(parts) < 2:
+        return None
+    try:
+        payload = parts[1] + "=" * (-len(parts[1]) % 4)
+        decoded = base64.urlsafe_b64decode(payload.encode("utf-8")).decode("utf-8")
+        result = json.loads(decoded)
+    except Exception:
+        return None
+    return result if isinstance(result, dict) else None
+
+
+def find_email_in_claims(value: Any) -> Optional[str]:
+    if isinstance(value, dict):
+        for key in ("email", "user_email", "account_email", "preferred_username", "upn"):
+            item = value.get(key)
+            if isinstance(item, str) and EMAIL_PATTERN.match(item.strip()):
+                return item.strip()
+        for item in value.values():
+            found = find_email_in_claims(item)
+            if found:
+                return found
+    elif isinstance(value, list):
+        for item in value:
+            found = find_email_in_claims(item)
+            if found:
+                return found
+    elif isinstance(value, str) and EMAIL_PATTERN.match(value.strip()):
+        return value.strip()
+    return None
+
+
+def find_email_in_auth_tokens(value: Any) -> Optional[str]:
+    if isinstance(value, dict):
+        for item in value.values():
+            found = find_email_in_auth_tokens(item)
+            if found:
+                return found
+    elif isinstance(value, list):
+        for item in value:
+            found = find_email_in_auth_tokens(item)
+            if found:
+                return found
+    elif isinstance(value, str):
+        claims = decode_jwt_payload(value)
+        if claims:
+            return find_email_in_claims(claims)
+    return None
 
 
 def auth_mode_label(value: Any) -> Optional[str]:
@@ -253,10 +326,12 @@ def safe_codex_account_info() -> Dict[str, Any]:
                     visit(item)
 
     visit(data)
+    email = found.get("email") or find_email_in_auth_tokens(data)
+    masked_email = mask_email(email)
     auth_mode = str(data.get("auth_mode") or "").strip() or None
     last_refresh = data.get("last_refresh") if isinstance(data.get("last_refresh"), str) else None
     display = (
-        found.get("email")
+        masked_email
         or found.get("name")
         or found.get("account_id")
         or auth_mode_label(auth_mode)
@@ -265,9 +340,9 @@ def safe_codex_account_info() -> Dict[str, Any]:
         "available": True,
         "source": "local_codex_auth_metadata",
         "display": display,
+        "masked_email": masked_email,
         "auth_mode": auth_mode,
         "auth_label": auth_mode_label(auth_mode),
-        "email": found.get("email"),
         "name": found.get("name"),
         "account_id": found.get("account_id"),
         "user_id": found.get("user_id"),
