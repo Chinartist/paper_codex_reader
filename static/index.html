@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper Codex Reader</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <div>
+          <h1>Paper Codex</h1>
+          <p>论文阅读工作区</p>
+        </div>
+        <button id="collapseSidebarBtn" class="icon-btn panel-toggle" type="button" aria-label="收起左侧栏" title="收起左侧栏">&lt;</button>
+      </div>
+
+      <div class="sidebar-rail" aria-label="左侧栏已收起">
+        <button id="expandSidebarBtn" class="icon-btn panel-toggle" type="button" aria-label="展开左侧栏" title="展开左侧栏">&gt;</button>
+      </div>
+
+      <section class="workspace-actions">
+        <button id="newConversationBtn" type="button">新建对话</button>
+        <button id="openLibraryBtn" class="secondary-btn" type="button">论文库</button>
+      </section>
+
+      <section class="panel grow conversations-panel">
+        <div class="panel-head">
+          <h2>历史对话</h2>
+          <button id="refreshConversationsBtn" class="small-btn" type="button">刷新</button>
+        </div>
+        <div id="conversationsList" class="list"></div>
+      </section>
+
+      <section class="account-dock">
+        <div>
+          <div id="codexStatus" class="codex-status">检查 Codex...</div>
+          <div id="queueSummary" class="queue-summary">没有运行中的任务</div>
+        </div>
+        <div class="account-actions">
+          <button id="settingsBtn" class="small-btn" type="button">设置</button>
+        </div>
+      </section>
+    </aside>
+
+    <main class="reader">
+      <header class="reader-toolbar">
+        <div class="reader-title">
+          <strong id="activePaperTitle">未选择论文</strong>
+          <span id="activeConversationTitle"></span>
+        </div>
+        <div class="toolbar-actions">
+          <div class="zoom-controls" aria-label="PDF 缩放">
+            <button id="zoomOutBtn" class="icon-btn" type="button" title="缩小">-</button>
+            <button id="zoomFitBtn" class="small-btn" type="button">适合宽度</button>
+            <button id="zoomActualBtn" class="small-btn" type="button">100%</button>
+            <button id="zoomInBtn" class="icon-btn" type="button" title="放大">+</button>
+            <span id="zoomValue" class="zoom-value">适合</span>
+          </div>
+        </div>
+      </header>
+      <div id="pdfViewer" class="pdf-viewer" aria-label="PDF 阅读器">
+        <div class="empty-state">
+          <h2>打开论文库选择 PDF</h2>
+          <p>也可以先在右侧新建空对话，直接向 Codex 提问。</p>
+        </div>
+      </div>
+    </main>
+
+    <div
+      id="chatResizer"
+      class="chat-resizer"
+      role="separator"
+      aria-label="调整右侧聊天面板宽度"
+      aria-orientation="vertical"
+      tabindex="0"
+    ></div>
+
+    <aside class="chat">
+      <div class="chat-head">
+        <div class="chat-title-row">
+          <div>
+            <h2>Codex</h2>
+            <p id="contextHint" class="context-hint">当前上下文：未选择论文</p>
+          </div>
+          <button id="collapseChatBtn" class="icon-btn panel-toggle" type="button" aria-label="收起右侧栏" title="收起右侧栏">&gt;</button>
+        </div>
+        <div class="codex-controls" aria-label="Codex 控制">
+          <label class="mini-field model-field" for="quickModelInput">
+            模型
+            <select id="quickModelInput"></select>
+            <input id="quickCustomModelInput" class="custom-model hidden" placeholder="自定义模型 ID" />
+          </label>
+          <label class="mini-field" for="quickReasoningInput">
+            推理
+            <select id="quickReasoningInput">
+              <option value="minimal">minimal</option>
+              <option value="low">low</option>
+              <option value="medium">medium</option>
+              <option value="high">high</option>
+              <option value="xhigh">xhigh</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div id="queuePanel" class="queue-panel hidden">
+        <div class="queue-head">
+          <strong>任务队列</strong>
+          <span id="queueCount">0</span>
+        </div>
+        <div id="taskList" class="task-list"></div>
+      </div>
+      <div id="workStatus" class="work-status hidden">
+        <span class="pulse-dot"></span>
+        <span id="workStatusText">Codex 正在处理...</span>
+      </div>
+      <div id="messages" class="messages" aria-live="polite"></div>
+      <div id="selectionBox" class="selection-box hidden">
+        <div>
+          <strong>已选中文本</strong>
+          <span id="selectionMeta"></span>
+        </div>
+        <button id="useSelectionBtn" class="small-btn">生成提问</button>
+      </div>
+      <div class="composer">
+        <label class="sr-only" for="messageInput">向 Codex 提问</label>
+        <div id="promptDock" class="prompt-dock">
+          <button id="promptDockTab" class="prompt-tab" type="button" aria-label="打开 prompt 列表">Prompt</button>
+          <section class="prompt-panel" aria-label="Prompt 列表">
+            <div class="prompt-panel-head">
+              <strong>Prompt 列表</strong>
+              <button id="addPromptBtn" class="small-btn" type="button">新增</button>
+            </div>
+            <div id="promptList" class="prompt-list"></div>
+            <form id="promptForm" class="prompt-form hidden">
+              <label>
+                名称
+                <input id="promptTitleInput" autocomplete="off" />
+              </label>
+              <label>
+                Prompt
+                <textarea id="promptContentInput" rows="5"></textarea>
+              </label>
+              <div class="prompt-form-actions">
+                <button id="savePromptBtn" class="small-btn" type="submit">保存</button>
+                <button id="cancelPromptBtn" class="small-btn secondary-btn" type="button">取消</button>
+              </div>
+            </form>
+          </section>
+        </div>
+        <textarea id="messageInput" rows="4" placeholder="向 Codex 提问..."></textarea>
+        <div class="composer-actions">
+          <button id="initializeBtn" class="secondary-btn" type="button" disabled>初始化</button>
+          <button id="sendBtn" type="button" disabled>发送</button>
+        </div>
+      </div>
+    </aside>
+
+    <button id="expandChatBtn" class="icon-btn edge-panel-toggle chat-edge-toggle" type="button" aria-label="展开右侧栏" title="展开右侧栏">&lt;</button>
+
+    <dialog id="libraryDialog" class="library-dialog">
+      <form method="dialog">
+        <div class="dialog-head">
+          <div>
+            <h2>论文库</h2>
+            <p id="librarySummary">管理本地 PDF、PDF 链接和当前阅读论文。</p>
+          </div>
+          <button class="icon-btn dialog-close" value="cancel" type="submit" aria-label="关闭" title="关闭">×</button>
+        </div>
+        <div class="library-grid">
+          <section class="library-import">
+            <h3>导入论文</h3>
+            <div class="import-box">
+              <div class="import-row">
+                <button id="chooseFileBtn" class="secondary-btn" type="button">选择 PDF</button>
+                <span id="chosenFileName">也可以粘贴 PDF 链接或本地路径</span>
+              </div>
+              <input id="paperFileInput" type="file" accept="application/pdf,.pdf" hidden />
+              <label class="field-label" for="paperSourceInput">
+                PDF 来源
+                <input id="paperSourceInput" placeholder="PDF 链接或本地绝对路径" />
+              </label>
+              <label class="field-label" for="paperTitleInput">
+                论文标题
+                <input id="paperTitleInput" placeholder="可选；留空使用文件名" />
+              </label>
+              <button id="importPaperBtn" type="button">导入论文</button>
+            </div>
+          </section>
+          <section class="library-list">
+            <div class="library-toolbar">
+              <label class="sr-only" for="paperSearchInput">搜索论文</label>
+              <input id="paperSearchInput" placeholder="搜索标题、来源或路径" />
+              <label class="sr-only" for="paperSortInput">排序</label>
+              <select id="paperSortInput">
+                <option value="created_desc">最近导入</option>
+                <option value="title_asc">标题 A-Z</option>
+                <option value="source_asc">来源</option>
+              </select>
+              <button id="refreshPapersBtn" class="small-btn" type="button">刷新</button>
+            </div>
+            <div class="library-browser">
+              <div id="papersList" class="paper-table" role="list"></div>
+              <aside id="paperDetail" class="paper-detail">
+                <div class="paper-detail-empty">选择一篇论文查看详情</div>
+              </aside>
+            </div>
+          </section>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="settingsDialog" class="settings-dialog">
+      <form method="dialog">
+        <div class="dialog-head">
+          <h2>Codex 设置</h2>
+          <button class="icon-btn dialog-close" value="cancel" aria-label="关闭" title="关闭">×</button>
+        </div>
+        <label>
+          Codex 路径
+          <input id="codexPathInput" />
+        </label>
+        <label class="model-field">
+          模型
+          <select id="modelInput"></select>
+          <input id="customModelInput" class="custom-model hidden" placeholder="例如 gpt-5.5" />
+        </label>
+        <label>
+          推理级别
+          <select id="reasoningInput">
+            <option value="minimal">minimal</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+            <option value="xhigh">xhigh</option>
+          </select>
+        </label>
+        <label>
+          输出详细度
+          <select id="verbosityInput">
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
+        </label>
+        <label>
+          论文分块字符数
+          <input id="chunkInput" type="number" min="4000" step="1000" />
+        </label>
+        <label>
+          Codex 超时秒数
+          <input id="timeoutInput" type="number" min="60" step="60" />
+        </label>
+        <div class="dialog-actions">
+          <button id="saveSettingsBtn" value="default">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="renameConversationDialog" class="settings-dialog">
+      <form method="dialog">
+        <div class="dialog-head">
+          <h2>重命名对话</h2>
+          <button class="icon-btn dialog-close" value="cancel" type="submit" aria-label="关闭" title="关闭">×</button>
+        </div>
+        <label for="renameConversationInput">
+          对话标题
+          <input id="renameConversationInput" maxlength="120" />
+        </label>
+        <div class="dialog-actions">
+          <button id="saveConversationTitleBtn" value="default" type="button">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="renamePaperDialog" class="settings-dialog">
+      <form method="dialog">
+        <div class="dialog-head">
+          <h2>重命名论文</h2>
+          <button class="icon-btn dialog-close" value="cancel" type="submit" aria-label="关闭" title="关闭">×</button>
+        </div>
+        <label for="renamePaperInput">
+          论文名称
+          <input id="renamePaperInput" maxlength="180" />
+        </label>
+        <div class="dialog-actions">
+          <button id="savePaperTitleBtn" value="default" type="button">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

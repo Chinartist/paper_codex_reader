@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Local runtime data should stay on each machine.
+.paper_codex_reader/
+PaperCodexReader/
+
+# Logs and temporary files.
+*.log
+*.tmp
