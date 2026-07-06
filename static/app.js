@@ -1511,7 +1511,8 @@ function bindEvents() {
   $("initializeBtn").addEventListener("click", initializeConversation);
   $("sendBtn").addEventListener("click", sendMessage);
   $("messageInput").addEventListener("keydown", (event) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
       sendMessage();
     }
   });
