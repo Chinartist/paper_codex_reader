@@ -45,6 +45,7 @@ const state = {
   chatCollapsed: localStorage.getItem("paperCodexChatCollapsed") === "true",
   promptTemplates: loadPromptTemplates(),
   editingPromptId: null,
+  selectionPositionFrame: 0,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -1093,24 +1094,48 @@ function handleSelection() {
   state.selectedText = text;
   state.selectedPage = pageNode ? pageNode.dataset.page : null;
   $("selectionMeta").textContent = `${text.length} 字符${state.selectedPage ? ` · 第 ${state.selectedPage} 页` : ""}`;
-  positionSelectionBox(selection);
-  $("selectionBox").classList.remove("hidden");
+  $("selectionBox").classList.toggle("hidden", !positionSelectionBox(selection));
 }
 
 function positionSelectionBox(selection) {
-  if (!selection || !selection.rangeCount) return;
+  if (!selection || !selection.rangeCount) return false;
   const range = selection.getRangeAt(0);
   const rects = Array.from(range.getClientRects()).filter((rect) => rect.width && rect.height);
-  const rect = rects[0] || range.getBoundingClientRect();
-  if (!rect || (!rect.width && !rect.height)) return;
+  const viewer = $("pdfViewer");
+  const viewerRect = viewer.getBoundingClientRect();
+  const visibleTop = Math.max(viewerRect.top, 0);
+  const visibleRight = Math.min(viewerRect.right, window.innerWidth);
+  const visibleBottom = Math.min(viewerRect.bottom, window.innerHeight);
+  const visibleLeft = Math.max(viewerRect.left, 0);
+  const rect = rects.find((item) =>
+    item.bottom > visibleTop && item.top < visibleBottom && item.right > visibleLeft && item.left < visibleRight
+  );
+  if (!rect) return false;
   const box = $("selectionBox");
-  const left = Math.min(Math.max(rect.left + rect.width / 2, 18), window.innerWidth - 18);
+  const left = Math.min(Math.max(rect.left + rect.width / 2, visibleLeft + 18), visibleRight - 18);
   const topAbove = rect.top - 42;
-  const placedBelow = topAbove < 8;
-  const top = placedBelow ? rect.bottom + 8 : topAbove;
+  const placedBelow = topAbove < visibleTop + 8;
+  const rawTop = placedBelow ? rect.bottom + 8 : topAbove;
+  const top = Math.min(Math.max(rawTop, visibleTop + 8), visibleBottom - 42);
   box.classList.toggle("below-selection", placedBelow);
   box.style.left = `${left}px`;
   box.style.top = `${top}px`;
+  return true;
+}
+
+function scheduleSelectionBoxSync() {
+  if (!state.selectedText || state.selectionPositionFrame) return;
+  state.selectionPositionFrame = window.requestAnimationFrame(() => {
+    state.selectionPositionFrame = 0;
+    syncSelectionBoxPosition();
+  });
+}
+
+function syncSelectionBoxPosition() {
+  if (!state.selectedText) return;
+  const selection = window.getSelection();
+  const hasLiveSelection = selection && selection.rangeCount && selection.toString().trim();
+  $("selectionBox").classList.toggle("hidden", !hasLiveSelection || !positionSelectionBox(selection));
 }
 
 function addSelectionToConversation() {
@@ -1272,6 +1297,10 @@ function deletePromptTemplate(promptId) {
 function clearSelection() {
   state.selectedText = "";
   state.selectedPage = null;
+  if (state.selectionPositionFrame) {
+    window.cancelAnimationFrame(state.selectionPositionFrame);
+    state.selectionPositionFrame = 0;
+  }
   $("selectionBox").classList.add("hidden");
   $("selectionBox").classList.remove("below-selection");
   $("selectionBox").style.removeProperty("left");
@@ -1537,6 +1566,8 @@ function bindEvents() {
     }
   });
   $("pdfViewer").addEventListener("mouseup", () => window.setTimeout(handleSelection, 20));
+  $("pdfViewer").addEventListener("scroll", scheduleSelectionBoxSync, { passive: true });
+  window.addEventListener("resize", scheduleSelectionBoxSync);
   $("addSelectionBtn").addEventListener("click", addSelectionToConversation);
   $("clearContextBtn").addEventListener("click", clearConversationSelections);
   $("contextList").addEventListener("click", (event) => {
