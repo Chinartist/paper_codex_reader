@@ -1,6 +1,8 @@
 # Paper Codex Reader
 
-Paper Codex Reader is a local PDF reader with a Codex-powered chat panel.
+[简体中文](README.zh-CN.md)
+
+Paper Codex Reader is a local PDF reader with a Codex-powered chat panel. It is designed for reading papers, sending selected passages into a Codex conversation, and keeping paper-specific reading sessions organized locally.
 
 It uses the local Codex CLI, so it can use your ChatGPT/Codex membership quota instead of an API key.
 
@@ -99,15 +101,71 @@ C:\Users\me\Documents\paper.pdf
 file:///C:/Users/me/Documents/paper.pdf
 ```
 
-## Features
+## Supported Features
 
-- Import papers from local PDF paths, uploads, or direct PDF links.
-- Render PDFs with selectable text.
-- Save local conversations and message history in SQLite.
-- Configure Codex CLI path, model, reasoning effort, verbosity, chunk size, and timeout.
-- Initialize a conversation by sending the current PDF text to Codex in chunks.
-- Send normal questions or selected-text prompts to the same conversation.
-- Run different conversations in parallel while keeping each conversation ordered.
+### Paper Library
+
+- Import papers from local PDF paths, uploaded files, or direct PDF links.
+- Search and sort papers in the paper library.
+- Rename a paper display title without changing the source PDF file.
+- Keep paper metadata, extracted text, conversations, and settings in the local data directory.
+
+### PDF Reader
+
+- Render PDFs in the browser with selectable text.
+- Select one or more text passages and add them to the current conversation with the floating check button.
+- Zoom in, zoom out, fit to width, or return to 100%.
+- Preserve the reading position when zooming or resizing panels.
+- Lazy-render visible pages so large PDFs stay responsive.
+- Collapse or expand the left paper/conversation sidebar and the right chat sidebar.
+- Resize the right chat sidebar horizontally.
+
+### Codex Chat
+
+- Use the local Codex CLI instead of an API key.
+- Log in through Codex CLI and view the detected login/status inside the app.
+- Choose Codex model, custom model, reasoning effort, verbosity, chunk size, and timeout.
+- Start a new conversation or continue a historical conversation.
+- Ask questions directly, with or without selected PDF passages.
+- Use `读全文` to send the current PDF text to Codex in chunks and let the same conversation read the whole paper.
+- For selected passages, the default prompt asks Codex to translate first and then analyze briefly.
+- Add multiple selected passages to one message before sending.
+
+### Conversations And Tasks
+
+- Create, read, rename, delete, and switch conversations.
+- Conversations are grouped under papers for easier navigation, while each conversation keeps its own Codex session id.
+- Different conversations can run tasks in parallel.
+- Tasks inside the same conversation stay ordered.
+- View queued/running tasks and cancel tasks from the task panel.
+
+### Prompt Templates
+
+- Use the prompt dock beside the composer for reusable prompts.
+- Built-in prompts include `总结当前论文` and `给我阅读路线`.
+- Add, edit, delete, and reuse your own prompt templates.
+
+## Keyboard Shortcuts
+
+Global shortcuts are ignored while typing in an input, textarea, select, or editable field.
+
+| Shortcut | Action |
+| --- | --- |
+| `Enter` in the chat box | Send the current message |
+| `Shift+Enter` in the chat box | Insert a new line |
+| `Cmd/Ctrl + +` or `Cmd/Ctrl + =` | Zoom in |
+| `Cmd/Ctrl + -` | Zoom out |
+| `Cmd/Ctrl + 0` | Set PDF zoom to 100% |
+| `F` | Fit PDF to width |
+| `Space` | Scroll the PDF reader down |
+| `Shift+Space` | Scroll the PDF reader up |
+| `PageDown` | Scroll the PDF reader down |
+| `PageUp` | Scroll the PDF reader up |
+| `Enter` in rename dialogs | Save the new paper or conversation name |
+| `Left/Right Arrow` on the chat resizer | Resize the right chat panel |
+| `Shift+Left/Right Arrow` on the chat resizer | Resize the right chat panel faster |
+| `Home` on the chat resizer | Set the right chat panel to minimum width |
+| `End` on the chat resizer | Set the right chat panel to maximum width |
 
 ## Packaging Notes
 
