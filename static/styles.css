@@ -1292,7 +1292,6 @@ body.resizing-chat {
   gap: 5px;
 }
 
-.task-guide-btn,
 .task-cancel-btn,
 .task-more-btn {
   min-height: 30px;
@@ -1300,37 +1299,6 @@ body.resizing-chat {
   background: transparent;
   color: rgba(255, 255, 255, 0.52);
   box-shadow: none;
-}
-
-.task-guide-btn {
-  position: relative;
-  padding: 0 8px 0 22px;
-  font-size: 12px;
-}
-
-.task-guide-btn::before {
-  content: "";
-  position: absolute;
-  left: 8px;
-  top: 50%;
-  width: 8px;
-  height: 7px;
-  border-left: 1.8px solid currentColor;
-  border-bottom: 1.8px solid currentColor;
-  border-radius: 0 0 0 3px;
-  transform: translateY(-55%);
-}
-
-.task-guide-btn::after {
-  content: "";
-  position: absolute;
-  left: 14px;
-  top: 50%;
-  width: 5px;
-  height: 5px;
-  border-right: 1.8px solid currentColor;
-  border-bottom: 1.8px solid currentColor;
-  transform: translateY(-48%) rotate(-45deg);
 }
 
 .task-cancel-btn,
@@ -1379,7 +1347,6 @@ body.resizing-chat {
   background: radial-gradient(circle, currentColor 1.3px, transparent 1.6px) 0 50% / 6px 4px repeat-x;
 }
 
-.task-guide-btn:hover,
 .task-cancel-btn:hover,
 .task-more-btn:hover {
   background: rgba(255, 255, 255, 0.07);

@@ -1325,7 +1325,6 @@ function renderTasks() {
         <span>${escapeHtml(status)}${meta && meta !== status ? ` · ${escapeHtml(meta)}` : ""}</span>
       </div>
       <div class="task-actions">
-        <button class="task-guide-btn" type="button" data-conversation-id="${escapeHtml(task.conversation_id || "")}">引导</button>
         <button class="task-cancel-btn" type="button" data-task-id="${escapeHtml(task.id)}" aria-label="取消任务" title="取消任务"></button>
         <button class="task-more-btn" type="button" aria-label="更多" title="更多"></button>
       </div>
@@ -1337,9 +1336,6 @@ function renderTasks() {
       item.addEventListener("dragend", handleTaskDragEnd);
       item.addEventListener("keydown", handleTaskKeyboardReorder);
     }
-    item.querySelector(".task-guide-btn").addEventListener("click", () => {
-      if (task.conversation_id) selectConversation(task.conversation_id);
-    });
     item.querySelector(".task-cancel-btn").addEventListener("click", () => cancelTask(task.id));
     list.appendChild(item);
   }
