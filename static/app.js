@@ -1106,7 +1106,9 @@ function positionSelectionBox(selection) {
   const box = $("selectionBox");
   const left = Math.min(Math.max(rect.left + rect.width / 2, 18), window.innerWidth - 18);
   const topAbove = rect.top - 42;
-  const top = topAbove >= 8 ? topAbove : rect.bottom + 8;
+  const placedBelow = topAbove < 8;
+  const top = placedBelow ? rect.bottom + 8 : topAbove;
+  box.classList.toggle("below-selection", placedBelow);
   box.style.left = `${left}px`;
   box.style.top = `${top}px`;
 }
@@ -1271,6 +1273,7 @@ function clearSelection() {
   state.selectedText = "";
   state.selectedPage = null;
   $("selectionBox").classList.add("hidden");
+  $("selectionBox").classList.remove("below-selection");
   $("selectionBox").style.removeProperty("left");
   $("selectionBox").style.removeProperty("top");
   const sel = window.getSelection();
