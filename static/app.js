@@ -49,6 +49,7 @@ const state = {
   conversationDrafts: loadConversationDrafts(),
   editingPromptId: null,
   editingTaskId: null,
+  editingResendMessageId: null,
   selectionPositionFrame: 0,
   draggingTaskId: null,
   draggingFolderKey: null,
@@ -308,6 +309,7 @@ function persistConversationDrafts() {
 }
 
 function saveActiveConversationDraft() {
+  if (state.editingResendMessageId) return;
   const key = activeDraftKey();
   if (!key) return;
   state.conversationDrafts[key] = {
@@ -1159,6 +1161,7 @@ async function ensureConversation() {
 
 async function selectConversation(convId) {
   saveActiveConversationDraft();
+  state.editingResendMessageId = null;
   clearSelection();
   state.activeConversation = state.conversations.find((conv) => conv.id === convId) || null;
   renderConversations();
@@ -1167,6 +1170,7 @@ async function selectConversation(convId) {
     : "";
   await loadMessages();
   restoreActiveConversationDraft();
+  updateComposerMode();
   updateContextHint();
   updateButtons();
 }
@@ -1185,7 +1189,7 @@ async function loadMessages() {
   }
   const messages = await api(`/api/conversations/${state.activeConversation.id}/messages`);
   for (const msg of messages) {
-    appendMessage(msg.role, msg.content);
+    appendMessage(msg.role, msg.content, msg);
   }
   const active = activeTaskForConversation(state.activeConversation.id);
   if (active) {
@@ -1194,15 +1198,63 @@ async function loadMessages() {
   scrollMessages();
 }
 
-function appendMessage(role, content) {
+function appendMessage(role, content, meta = {}) {
   const box = $("messages");
   const node = document.createElement("div");
   node.className = `message ${role}`;
+  if (meta.id) {
+    node.dataset.messageId = meta.id;
+  }
   node.innerHTML = `
     <div class="role">${role === "user" ? "你" : "Codex"}</div>
     <pre>${escapeHtml(content)}</pre>
+    ${role === "user" ? `
+      <div class="message-actions" aria-label="消息操作">
+        <button class="message-action-btn copy-message-btn" type="button" aria-label="复制" title="复制"></button>
+        <button class="message-action-btn edit-message-btn" type="button" aria-label="编辑再发送" title="编辑再发送"></button>
+      </div>
+    ` : ""}
   `;
+  if (role === "user") {
+    node.querySelector(".copy-message-btn").addEventListener("click", () => copyMessageContent(content));
+    node.querySelector(".edit-message-btn").addEventListener("click", () => startResendEdit(content, meta.id || ""));
+  }
   box.appendChild(node);
+}
+
+async function copyMessageContent(content) {
+  try {
+    await navigator.clipboard.writeText(content);
+    toast("已复制");
+  } catch {
+    toast("复制失败，请手动选择文本");
+  }
+}
+
+function startResendEdit(content, messageId = "") {
+  saveActiveConversationDraft();
+  state.editingResendMessageId = messageId || makeId();
+  $("messageInput").value = content;
+  clearConversationSelections({ persist: false });
+  clearSelection();
+  updateComposerMode();
+  $("messageInput").focus();
+  $("messageInput").setSelectionRange($("messageInput").value.length, $("messageInput").value.length);
+}
+
+function cancelResendEdit() {
+  state.editingResendMessageId = null;
+  $("messageInput").value = "";
+  restoreActiveConversationDraft();
+  updateComposerMode();
+}
+
+function updateComposerMode() {
+  const editing = Boolean(state.editingResendMessageId);
+  $("composer").classList.toggle("resend-editing", editing);
+  $("resendEditBar").classList.toggle("hidden", !editing);
+  $("initializeBtn").classList.toggle("hidden", editing);
+  $("sendBtn").textContent = editing ? "发送" : "发送";
 }
 
 async function initializeConversation() {
@@ -1262,6 +1314,8 @@ async function sendMessage() {
     await loadConversations();
     await loadTasks({ silent: true });
     updateContextHint();
+    state.editingResendMessageId = null;
+    updateComposerMode();
     toast("问题已加入队列");
   } catch (error) {
     if (state.activeConversation?.id === convId) {
@@ -2233,6 +2287,7 @@ function bindEvents() {
   $("newConversationBtn").addEventListener("click", newConversation);
   $("initializeBtn").addEventListener("click", initializeConversation);
   $("sendBtn").addEventListener("click", sendMessage);
+  $("cancelResendEditBtn").addEventListener("click", cancelResendEdit);
   $("messageInput").addEventListener("input", saveActiveConversationDraft);
   $("messageInput").addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -2293,6 +2348,7 @@ function bindEvents() {
     await saveSettings();
     $("settingsDialog").close();
   });
+  updateComposerMode();
 }
 
 bindEvents();

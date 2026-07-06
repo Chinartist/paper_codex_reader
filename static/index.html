@@ -118,7 +118,7 @@
         <span id="selectionMeta" class="sr-only"></span>
         <button id="addSelectionBtn" class="selection-add-btn" type="button" aria-label="添加选区到对话" title="添加到对话"></button>
       </div>
-      <div class="composer">
+      <div id="composer" class="composer">
         <label class="sr-only" for="messageInput">向 Codex 提问</label>
         <div id="promptDock" class="prompt-dock">
           <button id="promptDockTab" class="prompt-tab" type="button" aria-label="打开 prompt 列表">Prompt</button>
@@ -159,6 +159,10 @@
           <div id="taskList" class="task-list"></div>
         </div>
         <textarea id="messageInput" rows="4" placeholder="向 Codex 提问..."></textarea>
+        <div id="resendEditBar" class="resend-edit-bar hidden">
+          <span>编辑后重新发送</span>
+          <button id="cancelResendEditBtn" class="secondary-btn" type="button">取消</button>
+        </div>
         <div class="composer-actions">
           <button id="initializeBtn" class="secondary-btn" type="button" disabled>读全文</button>
           <button id="sendBtn" type="button" disabled>发送</button>

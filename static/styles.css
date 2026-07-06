@@ -1489,6 +1489,78 @@ body.resizing-chat {
   font-weight: 650;
 }
 
+.message-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.message-action-btn {
+  position: relative;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.055);
+  color: #64748b;
+  box-shadow: none;
+}
+
+.message-action-btn:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.1);
+  color: #1f2937;
+  transform: none;
+}
+
+.copy-message-btn::before,
+.copy-message-btn::after {
+  content: "";
+  position: absolute;
+  width: 11px;
+  height: 13px;
+  border: 1.8px solid currentColor;
+  border-radius: 3px;
+}
+
+.copy-message-btn::before {
+  left: 9px;
+  top: 10px;
+}
+
+.copy-message-btn::after {
+  left: 13px;
+  top: 7px;
+  background: #eef4ff;
+}
+
+.edit-message-btn::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 16px;
+  width: 13px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: rotate(-42deg);
+}
+
+.edit-message-btn::after {
+  content: "";
+  position: absolute;
+  left: 19px;
+  top: 9px;
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: currentColor;
+  transform: rotate(-42deg);
+}
+
 .message pre {
   white-space: pre-wrap;
   margin: 0;
@@ -1680,11 +1752,37 @@ body.resizing-chat {
   box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.035);
 }
 
+.resend-edit-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 4px 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.resend-edit-bar span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resend-editing textarea {
+  min-height: 132px;
+}
+
 .composer-actions {
   display: grid;
   grid-template-columns: auto 44px;
   gap: 8px;
   align-items: center;
+}
+
+.resend-editing .composer-actions {
+  grid-template-columns: 44px;
 }
 
 .prompt-dock {
