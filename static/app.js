@@ -1645,21 +1645,26 @@ function focusMessageInput({ moveCaretToEnd = true } = {}) {
   const input = $("messageInput");
   if (!input) return;
   const applyFocus = () => {
-    input.focus({ preventScroll: true });
+    try {
+      input.focus({ preventScroll: true });
+    } catch {
+      input.focus();
+    }
     if (moveCaretToEnd && typeof input.setSelectionRange === "function") {
       const end = input.value.length;
       input.setSelectionRange(end, end);
     }
   };
+  applyFocus();
   window.requestAnimationFrame(() => {
     applyFocus();
     window.setTimeout(applyFocus, 0);
   });
 }
 
-function requestComposerFocusReturn(duration = 900) {
+function requestComposerFocusReturn(duration = 1600) {
   state.composerFocusUntil = Math.max(state.composerFocusUntil, Date.now() + duration);
-  [0, 16, 80, 220].forEach((delay) => {
+  [0, 16, 80, 220, 500, 900, 1400].forEach((delay) => {
     window.setTimeout(() => {
       if (Date.now() <= state.composerFocusUntil) {
         focusMessageInput();
@@ -1673,8 +1678,14 @@ function settleComposerFocusReturn() {
   focusMessageInput();
   window.setTimeout(() => {
     focusMessageInput();
-    state.composerFocusUntil = 0;
   }, 40);
+}
+
+function sendMessageFromKeyboard() {
+  requestComposerFocusReturn();
+  window.setTimeout(() => {
+    sendMessage().finally(settleComposerFocusReturn);
+  }, 0);
 }
 
 function updateComposerMode() {
@@ -3513,9 +3524,25 @@ function bindEvents() {
     }
     if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
       event.preventDefault();
-      requestComposerFocusReturn();
-      sendMessage().finally(settleComposerFocusReturn);
+      event.stopPropagation();
+      sendMessageFromKeyboard();
     }
+  });
+  $("messageInput").addEventListener("keyup", (event) => {
+    if (event.key === "Enter" && Date.now() <= state.composerFocusUntil) {
+      focusMessageInput();
+    }
+  });
+  $("messageInput").addEventListener("blur", () => {
+    if (Date.now() > state.composerFocusUntil) return;
+    window.setTimeout(() => {
+      const active = document.activeElement;
+      const composer = $("composer");
+      const focusMovedInsideComposer = active && composer.contains(active) && active !== document.body;
+      if (!focusMovedInsideComposer) {
+        focusMessageInput();
+      }
+    }, 0);
   });
   $("messages").addEventListener("scroll", scheduleConversationPositionSave, { passive: true });
   $("composer").addEventListener("dragover", (event) => {
