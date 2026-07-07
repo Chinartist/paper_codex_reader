@@ -669,13 +669,20 @@ class Store:
         stamp = now_iso()
         clean_answer = str(answer or "").strip()
         with self.connect() as con:
+            existing_row = con.execute("select answer from highlights where id = ?", (highlight_id,)).fetchone()
+            if not existing_row:
+                raise ValueError("Highlight not found.")
+            existing_answer = str(existing_row["answer"] or "").rstrip()
+            next_answer = clean_answer
+            if conversation_id and existing_answer and clean_answer:
+                next_answer = f"{existing_answer}\n{clean_answer}"
             cur = con.execute(
                 """
                 update highlights
                 set conversation_id = coalesce(?, conversation_id), answer = ?, updated_at = ?
                 where id = ?
                 """,
-                (conversation_id, clean_answer or None, stamp, highlight_id),
+                (conversation_id, next_answer or None, stamp, highlight_id),
             )
             if cur.rowcount == 0:
                 raise ValueError("Highlight not found.")
