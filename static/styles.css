@@ -1926,7 +1926,16 @@ body.resizing-chat {
   transition: opacity 140ms ease, transform 140ms ease;
 }
 
-.selection-highlight-group:hover .highlight-palette,
+.highlight-palette::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -12px;
+  height: 12px;
+}
+
+.selection-box.palette-open .highlight-palette,
 .selection-highlight-group:focus-within .highlight-palette {
   opacity: 1;
   pointer-events: auto;

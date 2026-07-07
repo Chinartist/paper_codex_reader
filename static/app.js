@@ -30,6 +30,7 @@ const state = {
   selectedSnippets: [],
   highlights: [],
   highlightHoverTimer: 0,
+  highlightPaletteOpen: false,
   pendingAttachments: [],
   selectedFile: null,
   settings: {},
@@ -2209,9 +2210,10 @@ function leaveHighlight() {
 }
 
 function scheduleHighlightClear() {
+  if (state.highlightPaletteOpen) return;
   window.clearTimeout(state.highlightHoverTimer);
   state.highlightHoverTimer = window.setTimeout(() => {
-    if (state.selectionSource === "highlight") {
+    if (state.selectionSource === "highlight" && !state.highlightPaletteOpen) {
       clearSelection();
     }
   }, 180);
@@ -2260,6 +2262,23 @@ async function saveHighlightNote(event) {
   } catch (error) {
     toast(error.message || "保存备注失败", 7000);
   }
+}
+
+function openHighlightPalette() {
+  if (!state.selectedText) {
+    toast("请先选中论文文本");
+    return;
+  }
+  state.highlightPaletteOpen = true;
+  window.clearTimeout(state.highlightHoverTimer);
+  $("selectionBox").classList.add("palette-open");
+  $("highlightSelectionBtn").setAttribute("aria-expanded", "true");
+}
+
+function closeHighlightPalette() {
+  state.highlightPaletteOpen = false;
+  $("selectionBox")?.classList.remove("palette-open");
+  $("highlightSelectionBtn")?.setAttribute("aria-expanded", "false");
 }
 
 function refreshHighlightAnswer(highlightId) {
@@ -2636,6 +2655,7 @@ function refreshOpenSlashMenu() {
 }
 
 function clearSelection() {
+  closeHighlightPalette();
   state.selectedText = "";
   state.selectedPage = null;
   state.selectionSource = "";
@@ -3207,12 +3227,22 @@ function bindEvents() {
   });
   $("addSelectionBtn").addEventListener("click", addSelectionToConversation);
   $("sendSelectionBtn").addEventListener("click", sendSelectionImmediately);
-  $("highlightSelectionBtn").addEventListener("click", () => createHighlightFromSelection("yellow"));
+  $("highlightSelectionBtn").addEventListener("click", openHighlightPalette);
+  $("highlightSelectionBtn").addEventListener("dblclick", () => {
+    closeHighlightPalette();
+    createHighlightFromSelection("yellow");
+  });
   $("highlightPalette").addEventListener("click", (event) => {
     const button = event.target.closest(".highlight-color-btn");
     if (button?.dataset.highlightColor) {
+      closeHighlightPalette();
       createHighlightFromSelection(button.dataset.highlightColor);
     }
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (!state.highlightPaletteOpen) return;
+    if ($("selectionBox").contains(event.target)) return;
+    closeHighlightPalette();
   });
   $("clearContextBtn").addEventListener("click", clearConversationSelections);
   $("contextList").addEventListener("click", (event) => {
