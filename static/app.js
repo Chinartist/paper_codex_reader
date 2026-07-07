@@ -868,11 +868,16 @@ function renderConversations() {
           <span class="folder-title">${escapeHtml(group.title)}</span>
           <span class="folder-count">${group.conversations.length}</span>
         </button>
+        <button class="folder-open-paper-btn" type="button" ${group.paperId ? "" : "disabled"} aria-label="打开 ${escapeHtml(group.title)} 对应论文" title="${group.paperId ? "打开论文" : "没有绑定论文"}"></button>
         <button class="folder-new-conversation-btn" type="button" aria-label="在 ${escapeHtml(group.title)} 中新建对话" title="新建对话">+</button>
       </div>
       <div class="folder-children${isCollapsed ? " hidden" : ""}"></div>
     `;
     section.querySelector(".folder-toggle").addEventListener("click", () => toggleConversationGroup(group.key));
+    section.querySelector(".folder-open-paper-btn").addEventListener("click", (event) => {
+      event.stopPropagation();
+      openPaperForGroup(group);
+    });
     section.querySelector(".folder-new-conversation-btn").addEventListener("click", (event) => {
       event.stopPropagation();
       newConversationForGroup(group);
@@ -1266,6 +1271,14 @@ async function newConversationForGroup(group) {
   state.collapsedConversationGroups[group.key] = false;
   localStorage.setItem("paperCodexCollapsedConversationGroups", JSON.stringify(state.collapsedConversationGroups));
   await newConversation(group.paperId || null);
+}
+
+async function openPaperForGroup(group) {
+  if (!group.paperId) {
+    toast("这个文件夹没有绑定论文");
+    return;
+  }
+  await selectPaper(group.paperId);
 }
 
 async function ensureConversation() {

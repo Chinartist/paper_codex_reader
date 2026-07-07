@@ -438,7 +438,7 @@ body.chat-collapsed .chat-edge-toggle {
 
 .folder-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px;
+  grid-template-columns: minmax(0, 1fr) 34px 34px;
   align-items: center;
   gap: 6px;
 }
@@ -493,7 +493,9 @@ body.sidebar-sorting * {
 }
 
 .folder-new-conversation-btn,
-.sidebar button.folder-new-conversation-btn {
+.folder-open-paper-btn,
+.sidebar button.folder-new-conversation-btn,
+.sidebar button.folder-open-paper-btn {
   position: relative;
   width: 34px;
   min-width: 34px;
@@ -506,6 +508,12 @@ body.sidebar-sorting * {
   padding: 0;
   box-shadow: none;
   font-size: 0;
+}
+
+.folder-open-paper-btn:disabled,
+.sidebar button.folder-open-paper-btn:disabled {
+  opacity: 0.36;
+  cursor: not-allowed;
 }
 
 .folder-new-conversation-btn::before,
@@ -525,8 +533,33 @@ body.sidebar-sorting * {
   transform: translate(-50%, -50%) rotate(90deg);
 }
 
+.folder-open-paper-btn::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 8px;
+  width: 13px;
+  height: 17px;
+  border: 1.7px solid currentColor;
+  border-radius: 3px;
+}
+
+.folder-open-paper-btn::after {
+  content: "";
+  position: absolute;
+  right: 9px;
+  top: 8px;
+  width: 5px;
+  height: 5px;
+  border-left: 1.7px solid currentColor;
+  border-bottom: 1.7px solid currentColor;
+  background: rgba(255, 255, 255, 0.055);
+}
+
 .folder-new-conversation-btn:hover:not(:disabled),
-.sidebar button.folder-new-conversation-btn:hover:not(:disabled) {
+.folder-open-paper-btn:hover:not(:disabled),
+.sidebar button.folder-new-conversation-btn:hover:not(:disabled),
+.sidebar button.folder-open-paper-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(148, 163, 184, 0.28);
   color: #ffffff;
