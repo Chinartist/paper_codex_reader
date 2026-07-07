@@ -478,6 +478,7 @@ function renderPapers() {
   for (const paper of papers) {
     const item = document.createElement("button");
     item.type = "button";
+    item.title = "双击打开阅读";
     item.className = [
       "paper-row",
       state.activePaper?.id === paper.id ? "active" : "",
@@ -494,6 +495,13 @@ function renderPapers() {
       </span>
     `;
     item.addEventListener("click", () => selectLibraryPaper(paper.id));
+    item.addEventListener("dblclick", () => openLibraryPaper(paper.id, false));
+    item.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        openLibraryPaper(paper.id, false);
+      }
+    });
     list.appendChild(item);
   }
   if (!state.papers.length) {
