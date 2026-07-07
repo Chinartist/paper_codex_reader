@@ -15,6 +15,7 @@ const CONVERSATION_DRAFTS_KEY = "paperCodexConversationDrafts";
 const RECENT_PAPERS_KEY = "paperCodexRecentPapers";
 const READING_STATE_KEY = "paperCodexReadingState";
 const RECENT_PAPER_WINDOW_MS = 24 * 60 * 60 * 1000;
+const MAX_SAVED_CONVERSATION_POSITIONS = 80;
 const MAX_MESSAGE_ATTACHMENTS = 8;
 const MAX_MESSAGE_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 const HIGHLIGHT_COLORS = ["yellow", "green", "blue", "pink", "purple"];
@@ -151,9 +152,7 @@ async function loadInitialData() {
   await loadPapers();
   await loadConversations();
   await loadTasks({ silent: true });
-  if (state.activeConversation) {
-    await selectConversation(state.activeConversation.id);
-  }
+  await restoreSavedConversation();
   updateContextHint();
   resetShellScroll();
   window.setInterval(() => loadTasks({ silent: false }).catch(() => {}), 1600);
@@ -566,6 +565,99 @@ function loadReadingState() {
 function saveReadingState(patch = {}) {
   state.readingState = { ...state.readingState, ...patch, updatedAt: Date.now() };
   localStorage.setItem(READING_STATE_KEY, JSON.stringify(state.readingState));
+}
+
+function conversationPaperKey(conversation = state.activeConversation) {
+  const paperId = conversation?.paper_id || state.activePaper?.id || "";
+  return paperId ? `paper:${paperId}` : "paper:none";
+}
+
+function saveActiveConversationChoice() {
+  if (!state.activeConversation) return;
+  const lastConversationByPaper = {
+    ...(state.readingState?.lastConversationByPaper || {}),
+    [conversationPaperKey(state.activeConversation)]: state.activeConversation.id,
+  };
+  saveReadingState({
+    conversationId: state.activeConversation.id,
+    lastConversationByPaper,
+  });
+}
+
+function saveCurrentConversationPosition() {
+  if (!state.activeConversation) return;
+  const box = $("messages");
+  const id = state.activeConversation.id;
+  const positions = {
+    ...(state.readingState?.messageScrollByConversation || {}),
+    [id]: {
+      scrollTop: Math.max(0, Math.round(box.scrollTop)),
+      updatedAt: Date.now(),
+    },
+  };
+  const prunedPositions = Object.fromEntries(
+    Object.entries(positions)
+      .sort(([, a], [, b]) => (Number(b?.updatedAt) || 0) - (Number(a?.updatedAt) || 0))
+      .slice(0, MAX_SAVED_CONVERSATION_POSITIONS)
+  );
+  const lastConversationByPaper = {
+    ...(state.readingState?.lastConversationByPaper || {}),
+    [conversationPaperKey(state.activeConversation)]: id,
+  };
+  saveReadingState({
+    conversationId: id,
+    lastConversationByPaper,
+    messageScrollByConversation: prunedPositions,
+  });
+}
+
+function scheduleConversationPositionSave() {
+  window.clearTimeout(scheduleConversationPositionSave._timer);
+  scheduleConversationPositionSave._timer = window.setTimeout(saveCurrentConversationPosition, 160);
+}
+
+function restoreMessagesScrollPosition({ fallbackToBottom = true } = {}) {
+  const box = $("messages");
+  const id = state.activeConversation?.id;
+  const saved = id ? state.readingState?.messageScrollByConversation?.[id] : null;
+  const apply = () => {
+    if (saved && Number.isFinite(Number(saved.scrollTop))) {
+      box.scrollTop = clamp(Number(saved.scrollTop), 0, Math.max(0, box.scrollHeight - box.clientHeight));
+    } else if (fallbackToBottom) {
+      box.scrollTop = box.scrollHeight;
+    }
+  };
+  apply();
+  window.requestAnimationFrame(apply);
+}
+
+async function restoreSavedConversation() {
+  const activePaperKey = state.activePaper ? `paper:${state.activePaper.id}` : "paper:none";
+  const candidates = [
+    state.readingState?.conversationId,
+    state.readingState?.lastConversationByPaper?.[activePaperKey],
+  ].filter(Boolean);
+  const conversation = candidates
+    .map((id) => state.conversations.find((conv) => conv.id === id))
+    .find(Boolean);
+  if (conversation) {
+    await selectConversation(conversation.id, { restoreMessagePosition: true });
+  }
+}
+
+function forgetConversationState(conversationId) {
+  if (!conversationId) return;
+  const positions = { ...(state.readingState?.messageScrollByConversation || {}) };
+  delete positions[conversationId];
+  const lastConversationByPaper = Object.fromEntries(
+    Object.entries(state.readingState?.lastConversationByPaper || {})
+      .filter(([, id]) => id !== conversationId)
+  );
+  saveReadingState({
+    conversationId: state.readingState?.conversationId === conversationId ? "" : state.readingState?.conversationId,
+    lastConversationByPaper,
+    messageScrollByConversation: positions,
+  });
 }
 
 function recordRecentPaper(paperId) {
@@ -1261,6 +1353,7 @@ async function deleteConversation(conversationId) {
       method: "DELETE",
     });
     clearDraftForConversation(conversationId);
+    forgetConversationState(conversationId);
     if (state.activeConversation?.id === conversationId) {
       state.activeConversation = null;
       $("activeConversationTitle").textContent = "";
@@ -1321,8 +1414,9 @@ async function ensureConversation() {
   return state.activeConversation;
 }
 
-async function selectConversation(convId) {
+async function selectConversation(convId, options = {}) {
   saveActiveConversationDraft();
+  saveCurrentConversationPosition();
   state.editingResendMessageId = null;
   clearSelection();
   state.activeConversation = state.conversations.find((conv) => conv.id === convId) || null;
@@ -1330,14 +1424,19 @@ async function selectConversation(convId) {
   $("activeConversationTitle").textContent = state.activeConversation
     ? ` · ${state.activeConversation.title}`
     : "";
-  await loadMessages();
+  if (state.activeConversation) {
+    saveActiveConversationChoice();
+  }
+  await loadMessages({ restoreMessagePosition: options.restoreMessagePosition !== false });
   restoreActiveConversationDraft();
   updateComposerMode();
   updateContextHint();
   updateButtons();
 }
 
-async function loadMessages() {
+async function loadMessages(options = {}) {
+  const restoreMessagePosition = options.restoreMessagePosition !== false;
+  const forceBottom = options.forceBottom === true;
   const box = $("messages");
   box.innerHTML = "";
   if (!state.activeConversation) {
@@ -1357,7 +1456,13 @@ async function loadMessages() {
   if (active) {
     appendTaskPlaceholder(active);
   }
-  scrollMessages();
+  if (forceBottom) {
+    scrollMessages();
+  } else if (restoreMessagePosition) {
+    restoreMessagesScrollPosition();
+  } else {
+    scrollMessages();
+  }
 }
 
 function appendMessage(role, content, meta = {}) {
@@ -1663,7 +1768,7 @@ async function loadTasks({ silent } = { silent: false }) {
   if (changedToFinal.length) {
     await loadConversations();
     if (state.activeConversation && changedToFinal.some((task) => task.conversation_id === state.activeConversation.id)) {
-      await loadMessages();
+      await loadMessages({ forceBottom: true });
     }
     if (state.activePaper && changedToFinal.some((task) => task.status === "done")) {
       await loadHighlights(state.activePaper.id);
@@ -3096,6 +3201,7 @@ function fileToBase64(file) {
 function scrollMessages() {
   const box = $("messages");
   box.scrollTop = box.scrollHeight;
+  saveCurrentConversationPosition();
 }
 
 function resetShellScroll() {
@@ -3370,6 +3476,7 @@ function bindEvents() {
       sendMessage();
     }
   });
+  $("messages").addEventListener("scroll", scheduleConversationPositionSave, { passive: true });
   $("composer").addEventListener("dragover", (event) => {
     if (![...(event.dataTransfer?.items || [])].some((item) => item.kind === "file")) return;
     event.preventDefault();
