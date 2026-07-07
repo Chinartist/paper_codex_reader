@@ -91,23 +91,6 @@
           </div>
           <button id="collapseChatBtn" class="icon-btn panel-toggle" type="button" aria-label="收起右侧栏" title="收起右侧栏">&gt;</button>
         </div>
-        <div class="codex-controls" aria-label="Codex 控制">
-          <label class="mini-field model-field" for="quickModelInput">
-            模型
-            <select id="quickModelInput"></select>
-            <input id="quickCustomModelInput" class="custom-model hidden" placeholder="自定义模型 ID" />
-          </label>
-          <label class="mini-field" for="quickReasoningInput">
-            推理
-            <select id="quickReasoningInput">
-              <option value="minimal">minimal</option>
-              <option value="low">low</option>
-              <option value="medium">medium</option>
-              <option value="high">high</option>
-              <option value="xhigh">xhigh</option>
-            </select>
-          </label>
-        </div>
       </div>
       <div id="workStatus" class="work-status hidden">
         <span class="pulse-dot"></span>
@@ -168,9 +151,26 @@
           <span>编辑后重新发送</span>
           <button id="cancelResendEditBtn" class="secondary-btn" type="button">取消</button>
         </div>
-        <div class="composer-actions">
-          <button id="initializeBtn" class="secondary-btn" type="button" disabled>读全文</button>
-          <button id="sendBtn" type="button" disabled>发送</button>
+        <div class="composer-footer">
+          <div class="composer-tools" aria-label="Codex 控制">
+            <label class="composer-select model-field" for="quickModelInput">
+              <span class="sr-only">模型</span>
+              <select id="quickModelInput"></select>
+              <input id="quickCustomModelInput" class="custom-model hidden" placeholder="自定义模型 ID" />
+            </label>
+            <label class="composer-select" for="quickReasoningInput">
+              <span class="sr-only">推理</span>
+              <select id="quickReasoningInput">
+                <option value="minimal">minimal</option>
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+                <option value="xhigh">xhigh</option>
+              </select>
+            </label>
+            <button id="initializeBtn" class="secondary-btn" type="button" disabled>读全文</button>
+          </div>
+          <button id="sendBtn" type="button" disabled aria-label="发送" title="发送">发送</button>
         </div>
       </div>
     </aside>

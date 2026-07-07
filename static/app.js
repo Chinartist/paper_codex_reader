@@ -1275,7 +1275,32 @@ function updateComposerMode() {
   $("composer").classList.toggle("resend-editing", editing);
   $("resendEditBar").classList.toggle("hidden", !editing);
   $("initializeBtn").classList.toggle("hidden", editing);
-  $("sendBtn").textContent = editing ? "发送" : "发送";
+  updateButtons();
+}
+
+function composerHasPayload() {
+  return Boolean(
+    ($("messageInput")?.value || "").trim()
+    || state.selectedSnippets.length
+    || state.pendingAttachments.length
+  );
+}
+
+function shouldComposerButtonStop() {
+  if (state.editingResendMessageId || composerHasPayload()) return false;
+  const task = state.activeConversation ? activeTaskForConversation(state.activeConversation.id) : null;
+  return Boolean(task && ["running", "canceling"].includes(task.status));
+}
+
+async function handleComposerAction() {
+  if (shouldComposerButtonStop()) {
+    const task = activeTaskForConversation(state.activeConversation.id);
+    if (task && task.status !== "canceling") {
+      await cancelTask(task.id);
+    }
+    return;
+  }
+  await sendMessage();
 }
 
 async function initializeConversation() {
@@ -1934,6 +1959,7 @@ function renderSelectedContexts() {
     `;
     list.appendChild(node);
   }
+  updateButtons();
 }
 
 function removeSelectedContext(id) {
@@ -2156,20 +2182,22 @@ function renderAttachments() {
   tray.classList.toggle("hidden", !state.pendingAttachments.length);
   if (!state.pendingAttachments.length) {
     tray.innerHTML = "";
+    updateButtons();
     return;
   }
   tray.innerHTML = state.pendingAttachments
     .map((item) => `
-      <div class="attachment-chip" data-attachment-id="${escapeHtml(item.id)}">
-        <span class="attachment-glyph ${item.mime.startsWith("image/") ? "image" : "file"}" aria-hidden="true"></span>
+      <div class="attachment-chip ${item.mime.startsWith("image/") ? "image" : "file"}" data-attachment-id="${escapeHtml(item.id)}">
+        <span class="attachment-glyph" aria-hidden="true"></span>
         <span class="attachment-main">
           <strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong>
-          <small>${escapeHtml(item.mime || "文件")} · ${formatBytes(item.size)}</small>
+          <small>${item.mime.startsWith("image/") ? "image input" : "@file"} · ${escapeHtml(item.mime || "文件")} · ${formatBytes(item.size)}</small>
         </span>
         <button class="remove-attachment-btn" type="button" aria-label="移除 ${escapeHtml(item.name)}" title="移除"></button>
       </div>
     `)
     .join("");
+  updateButtons();
 }
 
 function removeAttachment(id, options = {}) {
@@ -2217,7 +2245,12 @@ function makeId() {
 }
 
 function updateButtons() {
-  $("sendBtn").disabled = state.busy;
+  const stopMode = shouldComposerButtonStop();
+  const activeTask = state.activeConversation ? activeTaskForConversation(state.activeConversation.id) : null;
+  $("sendBtn").classList.toggle("send-stop", stopMode);
+  $("sendBtn").disabled = stopMode ? activeTask?.status === "canceling" : state.busy || !composerHasPayload();
+  $("sendBtn").setAttribute("aria-label", stopMode ? "停止当前任务" : "发送");
+  $("sendBtn").setAttribute("title", stopMode ? "停止当前任务" : "发送");
   $("initializeBtn").disabled = state.busy || !state.activePaper;
   updateContextHint();
   showActiveWorkStatus();
@@ -2434,7 +2467,7 @@ function bindEvents() {
   $("importPaperBtn").addEventListener("click", importPaper);
   $("newConversationBtn").addEventListener("click", newConversation);
   $("initializeBtn").addEventListener("click", initializeConversation);
-  $("sendBtn").addEventListener("click", sendMessage);
+  $("sendBtn").addEventListener("click", handleComposerAction);
   $("cancelResendEditBtn").addEventListener("click", cancelResendEdit);
   $("attachFileBtn").addEventListener("click", () => $("messageAttachmentInput").click());
   $("messageAttachmentInput").addEventListener("change", () => {
@@ -2449,7 +2482,10 @@ function bindEvents() {
       removeAttachment(item.dataset.attachmentId);
     }
   });
-  $("messageInput").addEventListener("input", saveActiveConversationDraft);
+  $("messageInput").addEventListener("input", () => {
+    saveActiveConversationDraft();
+    updateButtons();
+  });
   $("messageInput").addEventListener("paste", (event) => {
     const files = [...(event.clipboardData?.files || [])];
     if (!files.length) return;

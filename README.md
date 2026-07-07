@@ -126,7 +126,10 @@ file:///C:/Users/me/Documents/paper.pdf
 - Choose Codex model, custom model, reasoning effort, verbosity, and timeout.
 - Start a new conversation or continue a historical conversation.
 - Ask questions directly, with or without selected PDF passages.
-- Attach images or files by pasting, dragging, or choosing from the file picker. Image attachments are sent to Codex with `--image`; non-image files are referenced with Codex-style `@file` paths.
+- Attach images or files by pasting, dragging, or choosing from the file picker. Context pills distinguish image inputs from Codex-style `@file` references.
+- Image attachments are sent to Codex with `--image`; non-image files are referenced with Codex-style `@file` paths.
+- Use compact model and reasoning controls directly in the composer.
+- When the current conversation is running and the composer is empty, the send button becomes a stop button.
 - Use `读全文` to send the current PDF path as a Codex-style `@file` reference and let the same conversation read the whole paper.
 - For selected passages, the default prompt asks Codex to translate first and then analyze briefly.
 - Add multiple selected passages to one message before sending.
