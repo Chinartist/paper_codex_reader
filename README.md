@@ -106,7 +106,7 @@ file:///C:/Users/me/Documents/paper.pdf
 - Search and sort papers in the paper library.
 - Rename a paper display title without changing the source PDF file.
 - Delete the app's local PDF copy from the paper library.
-- Keep paper metadata, extracted text, conversations, and settings in the local data directory.
+- Keep paper metadata, conversations, and settings in the local data directory.
 
 ### PDF Reader
 
@@ -123,10 +123,11 @@ file:///C:/Users/me/Documents/paper.pdf
 - Use the local Codex CLI instead of an API key.
 - Start Codex login, log out of Codex, and view the detected login/status inside the app.
 - Show recent Codex local usage and rate-limit windows in a compact hover card when local telemetry is available.
-- Choose Codex model, custom model, reasoning effort, verbosity, chunk size, and timeout.
+- Choose Codex model, custom model, reasoning effort, verbosity, and timeout.
 - Start a new conversation or continue a historical conversation.
 - Ask questions directly, with or without selected PDF passages.
-- Use `读全文` to send the current PDF text to Codex in chunks and let the same conversation read the whole paper.
+- Attach images or files by pasting, dragging, or choosing from the file picker. Image attachments are sent to Codex with `--image`; non-image files are referenced with Codex-style `@file` paths.
+- Use `读全文` to send the current PDF path as a Codex-style `@file` reference and let the same conversation read the whole paper.
 - For selected passages, the default prompt asks Codex to translate first and then analyze briefly.
 - Add multiple selected passages to one message before sending.
 

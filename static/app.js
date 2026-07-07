@@ -151,7 +151,6 @@ async function loadSettings() {
   syncModelControls(state.settings.model || "");
   $("reasoningInput").value = state.settings.reasoning_effort || "high";
   $("verbosityInput").value = state.settings.verbosity || "medium";
-  $("chunkInput").value = state.settings.paper_chunk_chars || "18000";
   $("timeoutInput").value = state.settings.codex_timeout_seconds || "600";
   $("quickReasoningInput").value = state.settings.reasoning_effort || "high";
 }
@@ -162,7 +161,6 @@ async function saveSettings() {
     model: selectedModelValue("modelInput", "customModelInput"),
     reasoning_effort: $("reasoningInput").value,
     verbosity: $("verbosityInput").value,
-    paper_chunk_chars: $("chunkInput").value,
     codex_timeout_seconds: $("timeoutInput").value,
   };
   state.settings = await api("/api/settings", {

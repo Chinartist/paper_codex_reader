@@ -922,11 +922,17 @@ class CodexRunner:
             "message": output or "Codex credentials removed.",
         }
 
-    def send(self, conv: Dict[str, Any], prompt: str, cancel_event: Optional[threading.Event] = None) -> Tuple[str, Optional[str]]:
+    def send(
+        self,
+        conv: Dict[str, Any],
+        prompt: str,
+        cancel_event: Optional[threading.Event] = None,
+        image_paths: Optional[List[str]] = None,
+    ) -> Tuple[str, Optional[str]]:
         session_id = conv.get("codex_session_id")
         if session_id:
-            return self._run_resume(session_id, prompt, cancel_event)
-        return self._run_new(prompt, cancel_event)
+            return self._run_resume(session_id, prompt, cancel_event, image_paths)
+        return self._run_new(prompt, cancel_event, image_paths)
 
     def _base_options(self) -> Tuple[str, List[str], int]:
         settings = self.store.settings()
@@ -945,7 +951,15 @@ class CodexRunner:
             opts += ["-c", f'model_verbosity="{verbosity}"']
         return path, opts, timeout
 
-    def _run_new(self, prompt: str, cancel_event: Optional[threading.Event] = None) -> Tuple[str, Optional[str]]:
+    def _image_options(self, image_paths: Optional[List[str]]) -> List[str]:
+        opts: List[str] = []
+        for image_path in image_paths or []:
+            opts += ["--image", image_path]
+        return opts
+
+    def _run_new(
+        self, prompt: str, cancel_event: Optional[threading.Event] = None, image_paths: Optional[List[str]] = None
+    ) -> Tuple[str, Optional[str]]:
         path, opts, timeout = self._base_options()
         with tempfile.NamedTemporaryFile("w+", delete=False, encoding="utf-8") as out:
             out_path = out.name
@@ -960,12 +974,16 @@ class CodexRunner:
             "--json",
             "-o",
             out_path,
-        ] + opts + ["-"]
+        ] + opts + self._image_options(image_paths) + ["-"]
         answer, thread_id = self._run_command(cmd, prompt, timeout, out_path, cancel_event)
         return answer, thread_id or latest_codex_session_id()
 
     def _run_resume(
-        self, session_id: str, prompt: str, cancel_event: Optional[threading.Event] = None
+        self,
+        session_id: str,
+        prompt: str,
+        cancel_event: Optional[threading.Event] = None,
+        image_paths: Optional[List[str]] = None,
     ) -> Tuple[str, Optional[str]]:
         path, opts, timeout = self._base_options()
         with tempfile.NamedTemporaryFile("w+", delete=False, encoding="utf-8") as out:
@@ -979,7 +997,7 @@ class CodexRunner:
             "--json",
             "-o",
             out_path,
-        ] + opts + ["-"]
+        ] + opts + self._image_options(image_paths) + ["-"]
         try:
             answer, thread_id = self._run_command(cmd, prompt, timeout, out_path, cancel_event)
             return answer, thread_id or session_id
@@ -990,7 +1008,7 @@ class CodexRunner:
                 "The previous Codex CLI session could not be resumed, so continue from this local app prompt.\n\n"
                 + prompt
             )
-            answer, new_session = self._run_new(fallback_prompt, cancel_event)
+            answer, new_session = self._run_new(fallback_prompt, cancel_event, image_paths)
             return f"[Codex session resume failed; started a new session.]\n\n{answer}", new_session
 
     def _run_command(
@@ -1157,6 +1175,7 @@ class TaskManager:
         user_message_id: Optional[str] = None,
         editable_content: Optional[str] = None,
         attachment_paths: Optional[List[str]] = None,
+        image_paths: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         return self._enqueue(
             conversation_id,
@@ -1167,6 +1186,7 @@ class TaskManager:
                 "editable_content": editable_content or prompt,
                 "user_message_id": user_message_id,
                 "attachment_paths": attachment_paths or [],
+                "image_paths": image_paths or [],
             },
         )
 
@@ -1230,19 +1250,21 @@ class TaskManager:
             task = dict(self.tasks.get(task_id) or {})
         kind = task.get("kind")
         if kind == "message":
-            self._run_message(task["conversation_id"], task.get("prompt") or "", event)
+            self._run_message(task["conversation_id"], task.get("prompt") or "", event, task.get("image_paths") or [])
         elif kind == "initialize":
             self._run_initialize(task["conversation_id"], task.get("paper_id") or "", event)
         else:
             raise RuntimeError("Unknown task type.")
 
-    def _run_message(self, conversation_id: str, prompt: str, event: threading.Event) -> None:
+    def _run_message(
+        self, conversation_id: str, prompt: str, event: threading.Event, image_paths: Optional[List[str]] = None
+    ) -> None:
         conv = self.store.get_conversation(conversation_id)
         if not conv:
             raise RuntimeError("Conversation not found.")
         if not prompt.strip():
             raise RuntimeError("Message is empty.")
-        answer, session_id = self.codex.send(conv, prompt, event)
+        answer, session_id = self.codex.send(conv, prompt, event, image_paths)
         self.store.update_conversation_session(conversation_id, session_id, initialized=False)
         self.store.add_message(conversation_id, "assistant", answer)
 
@@ -1316,11 +1338,20 @@ class TaskManager:
         public.pop("user_message_id", None)
         public.pop("paper_id", None)
         public.pop("attachment_paths", None)
+        public.pop("image_paths", None)
         return public
 
 
 def codex_file_reference(path: str) -> str:
     return f"@{path}\n本地路径：{path}"
+
+
+def is_image_attachment(item: Dict[str, Any]) -> bool:
+    mime = str(item.get("mime") or "").lower()
+    if mime.startswith("image/"):
+        return True
+    suffix = pathlib.Path(str(item.get("filename") or item.get("path") or "")).suffix.lower()
+    return suffix in {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 
 def init_pdf_path_prompt(title: str, pdf_path: str) -> str:
@@ -1348,14 +1379,15 @@ def selected_text_prompt(title: str, selected_text: str, user_note: str = "") ->
 
 
 def attachments_prompt_block(attachments: List[Dict[str, Any]]) -> str:
-    if not attachments:
+    file_attachments = [item for item in attachments if not is_image_attachment(item)]
+    if not file_attachments:
         return ""
     lines = [
-        "用户随这条消息附加了以下本地文件。请优先把每个 @file 引用作为上下文读取；"
+        "用户随这条消息附加了以下非图片文件。请优先把每个 @file 引用作为上下文读取；"
         "如果 @file 无法解析，就使用对应的本地路径读取。"
-        "图片请观察内容，PDF/文本/代码/数据文件请按文件内容处理。"
+        "PDF/文本/代码/数据文件请按文件内容处理。"
     ]
-    for index, item in enumerate(attachments, start=1):
+    for index, item in enumerate(file_attachments, start=1):
         lines.append(
             f"\n[附件 {index}] {item['filename']}\n"
             f"类型：{item['mime']}\n"
@@ -1363,6 +1395,13 @@ def attachments_prompt_block(attachments: List[Dict[str, Any]]) -> str:
             f"{codex_file_reference(item['path'])}"
         )
     return "\n\n" + "\n".join(lines)
+
+
+def images_prompt_block(images: List[Dict[str, Any]]) -> str:
+    if not images:
+        return ""
+    names = "、".join(str(item.get("filename") or "图片") for item in images)
+    return f"\n\n我通过 Codex CLI --image 附加了 {len(images)} 张图片：{names}。请结合图片内容回答。"
 
 
 def attachments_visible_block(attachments: List[Dict[str, Any]]) -> str:
@@ -1599,6 +1638,8 @@ class AppHandler(SimpleHTTPRequestHandler):
         selected = (data.get("selected_text") or "").strip()
         attachments = self.store.save_message_attachments(conv_id, data.get("attachments") or [])
         attachment_prompt = attachments_prompt_block(attachments)
+        image_attachments = [item for item in attachments if is_image_attachment(item)]
+        image_prompt = images_prompt_block(image_attachments)
         attachment_visible = attachments_visible_block(attachments)
         paper_title = ""
         paper_id = data.get("paper_id") or conv.get("paper_id")
@@ -1606,18 +1647,21 @@ class AppHandler(SimpleHTTPRequestHandler):
             paper = self.store.get_paper(paper_id)
             paper_title = paper["title"] if paper else ""
         if selected:
-            prompt = selected_text_prompt(paper_title or "当前论文", selected, content) + attachment_prompt
+            prompt = selected_text_prompt(paper_title or "当前论文", selected, content) + image_prompt + attachment_prompt
             visible = f"{content}\n\n> 选中文本：\n{selected}" if content else f"解释选中文本：\n{selected}"
         else:
-            prompt = content + attachment_prompt
+            prompt = content + image_prompt + attachment_prompt
             visible = content
+        if not prompt.strip() and image_attachments:
+            prompt = "请分析我通过 Codex CLI --image 附加的图片。"
         visible = (visible + attachment_visible).strip()
         if not prompt.strip():
             raise ValueError("Message is empty.")
         user_msg = self.store.add_message(conv_id, "user", visible)
         label = (visible.splitlines()[0] or "向 Codex 提问").strip()
         attachment_paths = [item["path"] for item in attachments]
-        task = self.tasks.enqueue_message(conv_id, prompt, label[:80], user_msg["id"], visible, attachment_paths)
+        image_paths = [item["path"] for item in image_attachments]
+        task = self.tasks.enqueue_message(conv_id, prompt, label[:80], user_msg["id"], visible, attachment_paths, image_paths)
         json_response(self, {"user": user_msg, "task": task})
 
 
