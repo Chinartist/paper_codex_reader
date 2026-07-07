@@ -1279,33 +1279,51 @@ body.sidebar-sorting * {
   border-radius: 3px;
   pointer-events: auto;
   cursor: pointer;
-  mix-blend-mode: multiply;
-  transition: opacity 150ms ease, box-shadow 150ms ease;
+  transition: filter 150ms ease;
+}
+
+.paper-highlight::before {
+  content: "";
+  position: absolute;
+  inset: 11% 0;
+  border-radius: 3px;
+  background: var(--highlight-fill);
+  box-shadow: inset 0 0 0 1px var(--highlight-edge);
 }
 
 .paper-highlight.yellow {
-  background: rgba(250, 204, 21, 0.42);
+  --highlight-fill: rgba(250, 204, 21, 0.34);
+  --highlight-edge: rgba(202, 138, 4, 0.1);
 }
 
 .paper-highlight.green {
-  background: rgba(74, 222, 128, 0.34);
+  --highlight-fill: rgba(74, 222, 128, 0.28);
+  --highlight-edge: rgba(22, 163, 74, 0.1);
 }
 
 .paper-highlight.blue {
-  background: rgba(96, 165, 250, 0.32);
+  --highlight-fill: rgba(96, 165, 250, 0.27);
+  --highlight-edge: rgba(37, 99, 235, 0.1);
 }
 
 .paper-highlight.pink {
-  background: rgba(244, 114, 182, 0.32);
+  --highlight-fill: rgba(244, 114, 182, 0.27);
+  --highlight-edge: rgba(219, 39, 119, 0.1);
 }
 
 .paper-highlight.purple {
-  background: rgba(168, 85, 247, 0.28);
+  --highlight-fill: rgba(168, 85, 247, 0.24);
+  --highlight-edge: rgba(126, 34, 206, 0.1);
 }
 
 .paper-highlight:hover {
-  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.18);
-  opacity: 0.92;
+  filter: saturate(1.08);
+}
+
+.paper-highlight:hover::before {
+  box-shadow:
+    inset 0 0 0 1px rgba(15, 23, 42, 0.16),
+    0 0 0 1px rgba(255, 255, 255, 0.55);
 }
 
 .chat {

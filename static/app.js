@@ -2189,7 +2189,7 @@ function renderHighlightsForPage(pageNode) {
   const page = pageNode.dataset.page;
   const pageHighlights = state.highlights.filter((item) => String(item.page) === String(page));
   for (const highlight of pageHighlights) {
-    for (const rect of highlight.rects || []) {
+    for (const rect of mergeHighlightRects(highlight.rects || [])) {
       const item = document.createElement("div");
       item.className = `paper-highlight ${highlightColorClass(highlight.color)}`;
       item.dataset.highlightId = highlight.id;
@@ -2213,6 +2213,76 @@ function highlightColorClass(color) {
   return HIGHLIGHT_COLORS.includes(color) ? color : "yellow";
 }
 
+function mergeHighlightRects(rects) {
+  const cleanRects = (Array.isArray(rects) ? rects : [])
+    .map((rect) => {
+      const left = clamp(Number(rect.left) || 0, 0, 1);
+      const top = clamp(Number(rect.top) || 0, 0, 1);
+      const right = clamp(left + (Number(rect.width) || 0), left, 1);
+      const bottom = clamp(top + (Number(rect.height) || 0), top, 1);
+      return {
+        left,
+        top,
+        width: Math.max(0.001, right - left),
+        height: Math.max(0.001, bottom - top),
+      };
+    })
+    .filter((rect) => rect.width > 0.001 && rect.height > 0.001)
+    .sort((a, b) => a.top - b.top || a.left - b.left);
+
+  const rows = [];
+  for (const rect of cleanRects) {
+    const center = rect.top + rect.height / 2;
+    const row = rows.find((candidate) => {
+      const rowCenter = (candidate.top + candidate.bottom) / 2;
+      const overlap = Math.min(candidate.bottom, rect.top + rect.height) - Math.max(candidate.top, rect.top);
+      const lineHeight = Math.max(candidate.bottom - candidate.top, rect.height);
+      return overlap > Math.min(candidate.bottom - candidate.top, rect.height) * 0.42
+        || Math.abs(center - rowCenter) < lineHeight * 0.38;
+    });
+    if (row) {
+      row.top = Math.min(row.top, rect.top);
+      row.bottom = Math.max(row.bottom, rect.top + rect.height);
+      row.rects.push(rect);
+    } else {
+      rows.push({
+        top: rect.top,
+        bottom: rect.top + rect.height,
+        rects: [rect],
+      });
+    }
+  }
+
+  return rows.flatMap((row) => {
+    const sorted = row.rects.sort((a, b) => a.left - b.left);
+    const merged = [];
+    for (const rect of sorted) {
+      const previous = merged[merged.length - 1];
+      const rectRight = rect.left + rect.width;
+      if (!previous) {
+        merged.push({ ...rect });
+        continue;
+      }
+      const previousRight = previous.left + previous.width;
+      const gap = rect.left - previousRight;
+      const maxGap = Math.max(0.012, Math.min(previous.height, rect.height) * 0.7);
+      if (gap <= maxGap) {
+        const left = Math.min(previous.left, rect.left);
+        const top = Math.min(previous.top, rect.top);
+        const right = Math.max(previousRight, rectRight);
+        const bottom = Math.max(previous.top + previous.height, rect.top + rect.height);
+        previous.left = left;
+        previous.top = top;
+        previous.width = Math.max(0.001, right - left);
+        previous.height = Math.max(0.001, bottom - top);
+      } else {
+        merged.push({ ...rect });
+      }
+    }
+    return merged;
+  });
+}
+
 function rectsFromCurrentSelection() {
   const selection = window.getSelection();
   if (!selection || !selection.rangeCount || !state.selectedPage) return [];
@@ -2220,7 +2290,7 @@ function rectsFromCurrentSelection() {
   const pageNode = $("pdfViewer").querySelector(`.pdf-page[data-page="${state.selectedPage}"]`);
   if (!pageNode) return [];
   const pageRect = pageNode.getBoundingClientRect();
-  return Array.from(range.getClientRects())
+  const rects = Array.from(range.getClientRects())
     .filter((rect) =>
       rect.width > 1
       && rect.height > 1
@@ -2242,6 +2312,7 @@ function rectsFromCurrentSelection() {
       };
     })
     .filter((rect) => rect.width > 0.001 && rect.height > 0.001);
+  return mergeHighlightRects(rects);
 }
 
 async function createHighlightFromSelection(color = "yellow") {
