@@ -688,6 +688,14 @@ class Store:
                 raise ValueError("Highlight not found.")
         return self.get_highlight(highlight_id)
 
+    def delete_highlight(self, highlight_id: str) -> Dict[str, Any]:
+        highlight = self.get_highlight(highlight_id)
+        if not highlight:
+            raise ValueError("Highlight not found.")
+        with self.connect() as con:
+            con.execute("delete from highlights where id = ?", (highlight_id,))
+        return {**highlight, "deleted": True}
+
     def add_paper_from_path(self, source_path: str, title: Optional[str] = None) -> Dict[str, Any]:
         src = clean_local_path(source_path)
         if not src.exists():
@@ -1726,6 +1734,9 @@ class AppHandler(SimpleHTTPRequestHandler):
             if path.startswith("/api/papers/") and path.count("/") == 3:
                 paper_id = path.split("/")[3]
                 json_response(self, self.store.delete_paper(paper_id))
+            elif path.startswith("/api/highlights/") and path.count("/") == 3:
+                highlight_id = path.split("/")[3]
+                json_response(self, self.store.delete_highlight(highlight_id))
             elif path.startswith("/api/conversations/") and path.count("/") == 3:
                 conv_id = path.split("/")[3]
                 if self.tasks.has_active_conversation_tasks(conv_id):

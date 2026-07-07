@@ -2232,7 +2232,10 @@ function showHighlightAnswer(highlight, element) {
       <textarea id="highlightNoteInput" class="highlight-note-input" rows="5" placeholder="给这处高亮写备注；发送给 Codex 后，回答也会写在这里。">${escapeHtml(answer)}</textarea>
       <div class="highlight-note-actions">
         <span>${answer ? "已保存内容，可直接修改" : "还没有备注"}</span>
-        <button class="small-btn" type="submit">保存</button>
+        <div class="highlight-note-buttons">
+          <button class="small-btn danger-btn delete-highlight-btn" type="button">删除高亮</button>
+          <button class="small-btn" type="submit">保存</button>
+        </div>
       </div>
     </form>
   `;
@@ -2261,6 +2264,26 @@ async function saveHighlightNote(event) {
     toast(answer.trim() ? "备注已保存" : "备注已清空");
   } catch (error) {
     toast(error.message || "保存备注失败", 7000);
+  }
+}
+
+async function deleteActiveHighlight() {
+  const card = $("highlightAnswerCard");
+  const highlightId = card.dataset.highlightId;
+  if (!highlightId) return;
+  const highlight = state.highlights.find((item) => item.id === highlightId);
+  const confirmed = window.confirm("删除这处高亮和它的备注/回答？");
+  if (!confirmed) return;
+  try {
+    const deleted = await api(`/api/highlights/${highlightId}`, { method: "DELETE" });
+    state.highlights = state.highlights.filter((item) => item.id !== highlightId);
+    const page = deleted.page || highlight?.page;
+    const pageNode = page ? $("pdfViewer").querySelector(`.pdf-page[data-page="${page}"]`) : null;
+    if (pageNode) renderHighlightsForPage(pageNode);
+    clearSelection();
+    toast("高亮已删除");
+  } catch (error) {
+    toast(error.message || "删除高亮失败", 7000);
   }
 }
 
@@ -3217,6 +3240,11 @@ function bindEvents() {
     if (state.selectionSource === "highlight") scheduleHighlightClear();
   });
   $("highlightAnswerCard").addEventListener("submit", saveHighlightNote);
+  $("highlightAnswerCard").addEventListener("click", (event) => {
+    if (event.target.closest(".delete-highlight-btn")) {
+      deleteActiveHighlight();
+    }
+  });
   $("highlightAnswerCard").addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();

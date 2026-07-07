@@ -115,6 +115,7 @@ file:///C:/Users/me/Documents/paper.pdf
 - Send the current selected passage immediately from the floating selection toolbar.
 - Highlight selected passages with multiple colors. Hovering a highlight reopens the selection toolbar and, when available, shows the Codex answer attached to that highlight without adding inline icons.
 - Add or edit notes on a highlight. Manual notes and Codex answers use the same saved field, so you can overwrite a Codex answer with your own wording.
+- Delete a highlight from the note card; its note and attached Codex answer are removed with it.
 - Zoom in, zoom out, fit to width, or return to 100%.
 - Preserve the reading position when zooming or resizing panels.
 - Lazy-render visible pages so large PDFs stay responsive.
