@@ -2219,19 +2219,47 @@ function scheduleHighlightClear() {
 
 function showHighlightAnswer(highlight, element) {
   const card = $("highlightAnswerCard");
-  if (!highlight.answer) {
-    card.classList.add("hidden");
-    card.innerHTML = "";
-    return;
-  }
   const rect = element.getBoundingClientRect();
   const left = Math.min(Math.max(rect.left + rect.width / 2, 180), window.innerWidth - 180);
   const top = rect.bottom + 10 < window.innerHeight - 80 ? rect.bottom + 10 : rect.top - 12;
-  card.innerHTML = `<strong>Codex 回答</strong><div class="markdown-body">${markdownToHtml(highlight.answer)}</div>`;
+  const answer = highlight.answer || "";
+  card.dataset.highlightId = highlight.id;
+  card.innerHTML = `
+    <form class="highlight-note-form">
+      <label class="highlight-note-label" for="highlightNoteInput">高亮备注 / Codex 回答</label>
+      <textarea id="highlightNoteInput" class="highlight-note-input" rows="5" placeholder="给这处高亮写备注；发送给 Codex 后，回答也会写在这里。">${escapeHtml(answer)}</textarea>
+      <div class="highlight-note-actions">
+        <span>${answer ? "已保存内容，可直接修改" : "还没有备注"}</span>
+        <button class="small-btn" type="submit">保存</button>
+      </div>
+    </form>
+  `;
   card.style.left = `${left}px`;
   card.style.top = `${top}px`;
   card.classList.toggle("above-highlight", top < rect.top);
   card.classList.remove("hidden");
+}
+
+async function saveHighlightNote(event) {
+  event.preventDefault();
+  const card = $("highlightAnswerCard");
+  const highlightId = card.dataset.highlightId;
+  if (!highlightId) return;
+  const input = card.querySelector(".highlight-note-input");
+  const answer = input ? input.value : "";
+  try {
+    const updated = await api(`/api/highlights/${highlightId}`, {
+      method: "POST",
+      body: JSON.stringify({ answer }),
+    });
+    state.highlights = state.highlights.map((item) => item.id === updated.id ? updated : item);
+    const pageNode = $("pdfViewer").querySelector(`.pdf-page[data-page="${updated.page}"]`);
+    if (pageNode) renderHighlightsForPage(pageNode);
+    card.dataset.highlightId = updated.id;
+    toast(answer.trim() ? "备注已保存" : "备注已清空");
+  } catch (error) {
+    toast(error.message || "保存备注失败", 7000);
+  }
 }
 
 function refreshHighlightAnswer(highlightId) {
@@ -3167,6 +3195,15 @@ function bindEvents() {
   $("highlightAnswerCard").addEventListener("pointerenter", () => window.clearTimeout(state.highlightHoverTimer));
   $("highlightAnswerCard").addEventListener("pointerleave", () => {
     if (state.selectionSource === "highlight") scheduleHighlightClear();
+  });
+  $("highlightAnswerCard").addEventListener("submit", saveHighlightNote);
+  $("highlightAnswerCard").addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+      const form = event.target.closest(".highlight-note-form");
+      if (form) saveHighlightNote(event);
+    }
   });
   $("addSelectionBtn").addEventListener("click", addSelectionToConversation);
   $("sendSelectionBtn").addEventListener("click", sendSelectionImmediately);

@@ -583,16 +583,21 @@ class Store:
                 "select * from highlights where paper_id = ? order by created_at asc",
                 (paper_id,),
             ).fetchall()
-        highlights = []
-        for row in rows:
-            item = dict(row)
-            try:
-                rects = json.loads(item.pop("rects_json") or "[]")
-            except Exception:
-                rects = []
-            item["rects"] = rects if isinstance(rects, list) else []
-            highlights.append(item)
-        return highlights
+        return [self._highlight_from_row(row) for row in rows]
+
+    def get_highlight(self, highlight_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as con:
+            row = con.execute("select * from highlights where id = ?", (highlight_id,)).fetchone()
+        return self._highlight_from_row(row) if row else None
+
+    def _highlight_from_row(self, row: sqlite3.Row) -> Dict[str, Any]:
+        item = dict(row)
+        try:
+            rects = json.loads(item.pop("rects_json") or "[]")
+        except Exception:
+            rects = []
+        item["rects"] = rects if isinstance(rects, list) else []
+        return item
 
     def add_highlight(self, data: Dict[str, Any]) -> Dict[str, Any]:
         paper_id = str(data.get("paper_id") or "").strip()
@@ -656,15 +661,25 @@ class Store:
             "updated_at": stamp,
         }
 
-    def update_highlight_answer(self, highlight_id: str, conversation_id: str, answer: str) -> None:
+    def update_highlight_answer(
+        self, highlight_id: str, conversation_id: Optional[str], answer: str
+    ) -> Optional[Dict[str, Any]]:
         if not highlight_id:
-            return
+            return None
         stamp = now_iso()
+        clean_answer = str(answer or "").strip()
         with self.connect() as con:
-            con.execute(
-                "update highlights set conversation_id = ?, answer = ?, updated_at = ? where id = ?",
-                (conversation_id, answer, stamp, highlight_id),
+            cur = con.execute(
+                """
+                update highlights
+                set conversation_id = coalesce(?, conversation_id), answer = ?, updated_at = ?
+                where id = ?
+                """,
+                (conversation_id, clean_answer or None, stamp, highlight_id),
             )
+            if cur.rowcount == 0:
+                raise ValueError("Highlight not found.")
+        return self.get_highlight(highlight_id)
 
     def add_paper_from_path(self, source_path: str, title: Optional[str] = None) -> Dict[str, Any]:
         src = clean_local_path(source_path)
@@ -1649,6 +1664,13 @@ class AppHandler(SimpleHTTPRequestHandler):
                 json_response(self, paper)
             elif path == "/api/highlights":
                 json_response(self, self.store.add_highlight(read_json(self)))
+            elif path.startswith("/api/highlights/") and path.count("/") == 3:
+                highlight_id = path.split("/")[3]
+                data = read_json(self)
+                json_response(
+                    self,
+                    self.store.update_highlight_answer(highlight_id, None, data.get("answer") or ""),
+                )
             elif path.startswith("/api/papers/") and path.count("/") == 3:
                 paper_id = path.split("/")[3]
                 data = read_json(self)
