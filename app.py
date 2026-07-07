@@ -458,6 +458,21 @@ class Store:
                     foreign key (conversation_id) references conversations(id)
                 );
 
+                create table if not exists highlights (
+                    id text primary key,
+                    paper_id text not null,
+                    conversation_id text,
+                    page text not null,
+                    text text not null,
+                    color text not null,
+                    rects_json text not null,
+                    answer text,
+                    created_at text not null,
+                    updated_at text not null,
+                    foreign key (paper_id) references papers(id),
+                    foreign key (conversation_id) references conversations(id)
+                );
+
                 create table if not exists settings (
                     key text primary key,
                     value text not null
@@ -558,8 +573,98 @@ class Store:
         except Exception as exc:
             raise ValueError(f"Could not delete local PDF copy: {exc}") from exc
         with self.connect() as con:
+            con.execute("delete from highlights where paper_id = ?", (paper_id,))
             con.execute("delete from papers where id = ?", (paper_id,))
         return {"id": paper_id, "title": paper["title"], "deleted": True, "deleted_file": deleted_file}
+
+    def list_highlights(self, paper_id: str) -> List[Dict[str, Any]]:
+        with self.connect() as con:
+            rows = con.execute(
+                "select * from highlights where paper_id = ? order by created_at asc",
+                (paper_id,),
+            ).fetchall()
+        highlights = []
+        for row in rows:
+            item = dict(row)
+            try:
+                rects = json.loads(item.pop("rects_json") or "[]")
+            except Exception:
+                rects = []
+            item["rects"] = rects if isinstance(rects, list) else []
+            highlights.append(item)
+        return highlights
+
+    def add_highlight(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        paper_id = str(data.get("paper_id") or "").strip()
+        page = str(data.get("page") or "").strip()
+        text = str(data.get("text") or "").strip()
+        color = str(data.get("color") or "yellow").strip()
+        rects = data.get("rects") or []
+        if not self.get_paper(paper_id):
+            raise ValueError("Paper not found.")
+        if not page or not text:
+            raise ValueError("Highlight needs page and text.")
+        if color not in {"yellow", "green", "blue", "pink", "purple"}:
+            color = "yellow"
+        if not isinstance(rects, list) or not rects:
+            raise ValueError("Highlight needs at least one rectangle.")
+        clean_rects = []
+        for rect in rects[:80]:
+            try:
+                clean_rects.append(
+                    {
+                        "left": max(0.0, min(1.0, float(rect.get("left", 0)))),
+                        "top": max(0.0, min(1.0, float(rect.get("top", 0)))),
+                        "width": max(0.001, min(1.0, float(rect.get("width", 0)))),
+                        "height": max(0.001, min(1.0, float(rect.get("height", 0)))),
+                    }
+                )
+            except Exception:
+                continue
+        if not clean_rects:
+            raise ValueError("Highlight rectangles are invalid.")
+        highlight_id = str(uuid.uuid4())
+        stamp = now_iso()
+        with self.connect() as con:
+            con.execute(
+                """
+                insert into highlights(id, paper_id, conversation_id, page, text, color, rects_json, answer, created_at, updated_at)
+                values (?, ?, ?, ?, ?, ?, ?, null, ?, ?)
+                """,
+                (
+                    highlight_id,
+                    paper_id,
+                    data.get("conversation_id") or None,
+                    page,
+                    text,
+                    color,
+                    json.dumps(clean_rects, ensure_ascii=False),
+                    stamp,
+                    stamp,
+                ),
+            )
+        return {
+            "id": highlight_id,
+            "paper_id": paper_id,
+            "conversation_id": data.get("conversation_id") or None,
+            "page": page,
+            "text": text,
+            "color": color,
+            "rects": clean_rects,
+            "answer": None,
+            "created_at": stamp,
+            "updated_at": stamp,
+        }
+
+    def update_highlight_answer(self, highlight_id: str, conversation_id: str, answer: str) -> None:
+        if not highlight_id:
+            return
+        stamp = now_iso()
+        with self.connect() as con:
+            con.execute(
+                "update highlights set conversation_id = ?, answer = ?, updated_at = ? where id = ?",
+                (conversation_id, answer, stamp, highlight_id),
+            )
 
     def add_paper_from_path(self, source_path: str, title: Optional[str] = None) -> Dict[str, Any]:
         src = clean_local_path(source_path)
@@ -1176,6 +1281,7 @@ class TaskManager:
         editable_content: Optional[str] = None,
         attachment_paths: Optional[List[str]] = None,
         image_paths: Optional[List[str]] = None,
+        highlight_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         return self._enqueue(
             conversation_id,
@@ -1187,6 +1293,7 @@ class TaskManager:
                 "user_message_id": user_message_id,
                 "attachment_paths": attachment_paths or [],
                 "image_paths": image_paths or [],
+                "highlight_id": highlight_id,
             },
         )
 
@@ -1250,14 +1357,25 @@ class TaskManager:
             task = dict(self.tasks.get(task_id) or {})
         kind = task.get("kind")
         if kind == "message":
-            self._run_message(task["conversation_id"], task.get("prompt") or "", event, task.get("image_paths") or [])
+            self._run_message(
+                task["conversation_id"],
+                task.get("prompt") or "",
+                event,
+                task.get("image_paths") or [],
+                task.get("highlight_id") or None,
+            )
         elif kind == "initialize":
             self._run_initialize(task["conversation_id"], task.get("paper_id") or "", event)
         else:
             raise RuntimeError("Unknown task type.")
 
     def _run_message(
-        self, conversation_id: str, prompt: str, event: threading.Event, image_paths: Optional[List[str]] = None
+        self,
+        conversation_id: str,
+        prompt: str,
+        event: threading.Event,
+        image_paths: Optional[List[str]] = None,
+        highlight_id: Optional[str] = None,
     ) -> None:
         conv = self.store.get_conversation(conversation_id)
         if not conv:
@@ -1267,6 +1385,8 @@ class TaskManager:
         answer, session_id = self.codex.send(conv, prompt, event, image_paths)
         self.store.update_conversation_session(conversation_id, session_id, initialized=False)
         self.store.add_message(conversation_id, "assistant", answer)
+        if highlight_id:
+            self.store.update_highlight_answer(highlight_id, conversation_id, answer)
 
     def _run_initialize(self, conversation_id: str, paper_id: str, event: threading.Event) -> None:
         conv = self.store.get_conversation(conversation_id)
@@ -1484,6 +1604,9 @@ class AppHandler(SimpleHTTPRequestHandler):
             elif path.startswith("/api/papers/") and path.endswith("/file"):
                 paper_id = path.split("/")[3]
                 self.serve_paper_file(paper_id)
+            elif path.startswith("/api/papers/") and path.endswith("/highlights"):
+                paper_id = path.split("/")[3]
+                json_response(self, self.store.list_highlights(paper_id))
             elif path == "/api/conversations":
                 json_response(self, self.store.list_conversations())
             elif path.startswith("/api/conversations/") and path.endswith("/messages"):
@@ -1524,6 +1647,8 @@ class AppHandler(SimpleHTTPRequestHandler):
                 else:
                     raise ValueError("Provide either a local PDF path or a PDF URL.")
                 json_response(self, paper)
+            elif path == "/api/highlights":
+                json_response(self, self.store.add_highlight(read_json(self)))
             elif path.startswith("/api/papers/") and path.count("/") == 3:
                 paper_id = path.split("/")[3]
                 data = read_json(self)
@@ -1661,7 +1786,16 @@ class AppHandler(SimpleHTTPRequestHandler):
         label = (visible.splitlines()[0] or "向 Codex 提问").strip()
         attachment_paths = [item["path"] for item in attachments]
         image_paths = [item["path"] for item in image_attachments]
-        task = self.tasks.enqueue_message(conv_id, prompt, label[:80], user_msg["id"], visible, attachment_paths, image_paths)
+        task = self.tasks.enqueue_message(
+            conv_id,
+            prompt,
+            label[:80],
+            user_msg["id"],
+            visible,
+            attachment_paths,
+            image_paths,
+            str(data.get("highlight_id") or "") or None,
+        )
         json_response(self, {"user": user_msg, "task": task})
 
 

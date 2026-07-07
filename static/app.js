@@ -16,6 +16,7 @@ const RECENT_PAPERS_KEY = "paperCodexRecentPapers";
 const RECENT_PAPER_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MAX_MESSAGE_ATTACHMENTS = 8;
 const MAX_MESSAGE_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+const HIGHLIGHT_COLORS = ["yellow", "green", "blue", "pink", "purple"];
 
 const state = {
   papers: [],
@@ -24,7 +25,11 @@ const state = {
   activeConversation: null,
   selectedText: "",
   selectedPage: null,
+  selectionSource: "",
+  activeHighlightId: null,
   selectedSnippets: [],
+  highlights: [],
+  highlightHoverTimer: 0,
   pendingAttachments: [],
   selectedFile: null,
   settings: {},
@@ -796,10 +801,12 @@ async function selectPaper(paperId) {
   $("activeConversationTitle").textContent = state.activeConversation ? ` · ${state.activeConversation.title}` : "";
   clearSelection();
   if (state.activePaper) {
+    await loadHighlights(state.activePaper.id);
     await renderPdf(`/api/papers/${state.activePaper.id}/file`);
   } else {
     state.pdfDoc = null;
     state.pdfUrl = "";
+    state.highlights = [];
     $("pdfViewer").innerHTML = `
       <div class="empty-state">
         <h2>打开论文库选择 PDF</h2>
@@ -810,6 +817,15 @@ async function selectPaper(paperId) {
   updateContextHint();
   updateButtons();
   resetShellScroll();
+}
+
+async function loadHighlights(paperId) {
+  try {
+    state.highlights = await api(`/api/papers/${paperId}/highlights`);
+  } catch (error) {
+    state.highlights = [];
+    toast(error.message || "加载高亮失败", 7000);
+  }
 }
 
 async function loadConversations() {
@@ -1595,6 +1611,12 @@ async function loadTasks({ silent } = { silent: false }) {
     if (state.activeConversation && changedToFinal.some((task) => task.conversation_id === state.activeConversation.id)) {
       await loadMessages();
     }
+    if (state.activePaper && changedToFinal.some((task) => task.status === "done")) {
+      await loadHighlights(state.activePaper.id);
+      for (const pageNode of $("pdfViewer").querySelectorAll(".pdf-page")) {
+        renderHighlightsForPage(pageNode);
+      }
+    }
     for (const task of changedToFinal) {
       if (!silent && task.status === "error") {
         toast(task.error || "Codex 任务失败", 9000);
@@ -1910,7 +1932,9 @@ async function renderPdfPage(pageNumber, token = state.pdfRenderToken) {
     const textLayer = document.createElement("div");
     textLayer.className = "text-layer";
     textLayer.style.setProperty("--scale-factor", String(state.currentScale));
-    pageNode.replaceChildren(canvas, textLayer);
+    const highlightLayer = document.createElement("div");
+    highlightLayer.className = "highlight-layer";
+    pageNode.replaceChildren(canvas, textLayer, highlightLayer);
     pageNode.classList.remove("loading");
 
     await page.render({
@@ -1921,6 +1945,7 @@ async function renderPdfPage(pageNumber, token = state.pdfRenderToken) {
     if (token !== state.pdfRenderToken) return;
     const textContent = await page.getTextContent();
     await renderTextLayer(textContent, textLayer, viewport);
+    renderHighlightsForPage(pageNode);
     state.renderedPages.add(pageNumber);
   } finally {
     state.renderingPages.delete(pageNumber);
@@ -2074,6 +2099,152 @@ async function renderTextLayer(textContent, container, viewport) {
   }
 }
 
+function renderHighlightsForPage(pageNode) {
+  const layer = pageNode.querySelector(".highlight-layer");
+  if (!layer) return;
+  layer.innerHTML = "";
+  const page = pageNode.dataset.page;
+  const pageHighlights = state.highlights.filter((item) => String(item.page) === String(page));
+  for (const highlight of pageHighlights) {
+    for (const rect of highlight.rects || []) {
+      const item = document.createElement("div");
+      item.className = `paper-highlight ${highlightColorClass(highlight.color)}`;
+      item.dataset.highlightId = highlight.id;
+      item.style.left = `${rect.left * 100}%`;
+      item.style.top = `${rect.top * 100}%`;
+      item.style.width = `${rect.width * 100}%`;
+      item.style.height = `${rect.height * 100}%`;
+      item.addEventListener("pointerenter", () => enterHighlight(highlight, item));
+      item.addEventListener("pointerleave", () => leaveHighlight(highlight));
+      layer.appendChild(item);
+    }
+  }
+}
+
+function renderHighlightEverywhere(highlight) {
+  const pageNode = $("pdfViewer").querySelector(`.pdf-page[data-page="${highlight.page}"]`);
+  if (pageNode) renderHighlightsForPage(pageNode);
+}
+
+function highlightColorClass(color) {
+  return HIGHLIGHT_COLORS.includes(color) ? color : "yellow";
+}
+
+function rectsFromCurrentSelection() {
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount || !state.selectedPage) return [];
+  const range = selection.getRangeAt(0);
+  const pageNode = $("pdfViewer").querySelector(`.pdf-page[data-page="${state.selectedPage}"]`);
+  if (!pageNode) return [];
+  const pageRect = pageNode.getBoundingClientRect();
+  return Array.from(range.getClientRects())
+    .filter((rect) =>
+      rect.width > 1
+      && rect.height > 1
+      && rect.bottom > pageRect.top
+      && rect.top < pageRect.bottom
+      && rect.right > pageRect.left
+      && rect.left < pageRect.right
+    )
+    .map((rect) => {
+      const left = clamp((Math.max(rect.left, pageRect.left) - pageRect.left) / pageRect.width, 0, 1);
+      const top = clamp((Math.max(rect.top, pageRect.top) - pageRect.top) / pageRect.height, 0, 1);
+      const right = clamp((Math.min(rect.right, pageRect.right) - pageRect.left) / pageRect.width, 0, 1);
+      const bottom = clamp((Math.min(rect.bottom, pageRect.bottom) - pageRect.top) / pageRect.height, 0, 1);
+      return {
+        left,
+        top,
+        width: Math.max(0.001, right - left),
+        height: Math.max(0.001, bottom - top),
+      };
+    })
+    .filter((rect) => rect.width > 0.001 && rect.height > 0.001);
+}
+
+async function createHighlightFromSelection(color = "yellow") {
+  if (!state.activePaper || !state.selectedText || !state.selectedPage) {
+    toast("请先选中论文文本");
+    return;
+  }
+  const rects = rectsFromCurrentSelection();
+  if (!rects.length) {
+    toast("没有找到可高亮的选区位置");
+    return;
+  }
+  try {
+    const highlight = await api("/api/highlights", {
+      method: "POST",
+      body: JSON.stringify({
+        paper_id: state.activePaper.id,
+        conversation_id: state.activeConversation ? state.activeConversation.id : null,
+        page: state.selectedPage,
+        text: state.selectedText,
+        color: highlightColorClass(color),
+        rects,
+      }),
+    });
+    state.highlights.push(highlight);
+    renderHighlightEverywhere(highlight);
+    clearSelection();
+    toast("已高亮");
+  } catch (error) {
+    toast(error.message || "高亮失败", 7000);
+  }
+}
+
+function enterHighlight(highlight, element) {
+  window.clearTimeout(state.highlightHoverTimer);
+  state.selectedText = highlight.text;
+  state.selectedPage = highlight.page;
+  state.selectionSource = "highlight";
+  state.activeHighlightId = highlight.id;
+  $("selectionMeta").textContent = `${highlight.text.length} 字符 · 第 ${highlight.page} 页`;
+  positionSelectionBoxForRect(element.getBoundingClientRect());
+  $("selectionBox").classList.remove("hidden");
+  showHighlightAnswer(highlight, element);
+}
+
+function leaveHighlight() {
+  scheduleHighlightClear();
+}
+
+function scheduleHighlightClear() {
+  window.clearTimeout(state.highlightHoverTimer);
+  state.highlightHoverTimer = window.setTimeout(() => {
+    if (state.selectionSource === "highlight") {
+      clearSelection();
+    }
+  }, 180);
+}
+
+function showHighlightAnswer(highlight, element) {
+  const card = $("highlightAnswerCard");
+  if (!highlight.answer) {
+    card.classList.add("hidden");
+    card.innerHTML = "";
+    return;
+  }
+  const rect = element.getBoundingClientRect();
+  const left = Math.min(Math.max(rect.left + rect.width / 2, 180), window.innerWidth - 180);
+  const top = rect.bottom + 10 < window.innerHeight - 80 ? rect.bottom + 10 : rect.top - 12;
+  card.innerHTML = `<strong>Codex 回答</strong><div class="markdown-body">${markdownToHtml(highlight.answer)}</div>`;
+  card.style.left = `${left}px`;
+  card.style.top = `${top}px`;
+  card.classList.toggle("above-highlight", top < rect.top);
+  card.classList.remove("hidden");
+}
+
+function refreshHighlightAnswer(highlightId) {
+  if (!highlightId || !state.activePaper) return;
+  loadHighlights(state.activePaper.id)
+    .then(() => {
+      for (const pageNode of $("pdfViewer").querySelectorAll(".pdf-page")) {
+        renderHighlightsForPage(pageNode);
+      }
+    })
+    .catch(() => {});
+}
+
 function handleSelection() {
   const selection = window.getSelection();
   const text = selection ? selection.toString().trim() : "";
@@ -2089,6 +2260,8 @@ function handleSelection() {
   const pageNode = node && node.closest ? node.closest(".pdf-page") : null;
   state.selectedText = text;
   state.selectedPage = pageNode ? pageNode.dataset.page : null;
+  state.selectionSource = "native";
+  state.activeHighlightId = null;
   $("selectionMeta").textContent = `${text.length} 字符${state.selectedPage ? ` · 第 ${state.selectedPage} 页` : ""}`;
   $("selectionBox").classList.toggle("hidden", !positionSelectionBox(selection));
 }
@@ -2107,8 +2280,18 @@ function positionSelectionBox(selection) {
     item.bottom > visibleTop && item.top < visibleBottom && item.right > visibleLeft && item.left < visibleRight
   );
   if (!rect) return false;
+  return positionSelectionBoxForRect(rect);
+}
+
+function positionSelectionBoxForRect(rect) {
+  const viewer = $("pdfViewer");
+  const viewerRect = viewer.getBoundingClientRect();
+  const visibleTop = Math.max(viewerRect.top, 0);
+  const visibleRight = Math.min(viewerRect.right, window.innerWidth);
+  const visibleBottom = Math.min(viewerRect.bottom, window.innerHeight);
+  const visibleLeft = Math.max(viewerRect.left, 0);
   const box = $("selectionBox");
-  const toolbarHalfWidth = 42;
+  const toolbarHalfWidth = 58;
   const left = Math.min(Math.max(rect.left + rect.width / 2, visibleLeft + toolbarHalfWidth), visibleRight - toolbarHalfWidth);
   const topAbove = rect.top - 42;
   const placedBelow = topAbove < visibleTop + 8;
@@ -2159,6 +2342,7 @@ function addSelectionToConversation() {
 
 async function sendSelectionImmediately() {
   if (!state.selectedText) return;
+  const highlightId = state.activeHighlightId;
   const snippet = {
     id: makeId(),
     text: state.selectedText,
@@ -2179,10 +2363,12 @@ async function sendSelectionImmediately() {
         selected_text: selectedText,
         attachments: [],
         paper_id: state.activePaper ? state.activePaper.id : null,
+        highlight_id: highlightId,
       }),
     });
     await loadConversations();
     await loadTasks({ silent: true });
+    if (highlightId) refreshHighlightAnswer(highlightId);
     updateContextHint();
     toast("选区已加入队列");
   } catch (error) {
@@ -2424,10 +2610,14 @@ function refreshOpenSlashMenu() {
 function clearSelection() {
   state.selectedText = "";
   state.selectedPage = null;
+  state.selectionSource = "";
+  state.activeHighlightId = null;
   if (state.selectionPositionFrame) {
     window.cancelAnimationFrame(state.selectionPositionFrame);
     state.selectionPositionFrame = 0;
   }
+  window.clearTimeout(state.highlightHoverTimer);
+  $("highlightAnswerCard")?.classList.add("hidden");
   $("selectionBox").classList.add("hidden");
   $("selectionBox").classList.remove("below-selection");
   $("selectionBox").style.removeProperty("left");
@@ -2969,8 +3159,24 @@ function bindEvents() {
   $("pdfViewer").addEventListener("mouseup", () => window.setTimeout(handleSelection, 20));
   $("pdfViewer").addEventListener("scroll", scheduleSelectionBoxSync, { passive: true });
   window.addEventListener("resize", scheduleSelectionBoxSync);
+  $("selectionBox").addEventListener("mousedown", (event) => event.preventDefault());
+  $("selectionBox").addEventListener("pointerenter", () => window.clearTimeout(state.highlightHoverTimer));
+  $("selectionBox").addEventListener("pointerleave", () => {
+    if (state.selectionSource === "highlight") scheduleHighlightClear();
+  });
+  $("highlightAnswerCard").addEventListener("pointerenter", () => window.clearTimeout(state.highlightHoverTimer));
+  $("highlightAnswerCard").addEventListener("pointerleave", () => {
+    if (state.selectionSource === "highlight") scheduleHighlightClear();
+  });
   $("addSelectionBtn").addEventListener("click", addSelectionToConversation);
   $("sendSelectionBtn").addEventListener("click", sendSelectionImmediately);
+  $("highlightSelectionBtn").addEventListener("click", () => createHighlightFromSelection("yellow"));
+  $("highlightPalette").addEventListener("click", (event) => {
+    const button = event.target.closest(".highlight-color-btn");
+    if (button?.dataset.highlightColor) {
+      createHighlightFromSelection(button.dataset.highlightColor);
+    }
+  });
   $("clearContextBtn").addEventListener("click", clearConversationSelections);
   $("contextList").addEventListener("click", (event) => {
     const button = event.target.closest(".remove-context-btn");

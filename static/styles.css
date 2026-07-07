@@ -1184,6 +1184,48 @@ body.sidebar-sorting * {
   color: transparent;
 }
 
+.highlight-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.paper-highlight {
+  position: absolute;
+  border-radius: 3px;
+  pointer-events: auto;
+  cursor: pointer;
+  mix-blend-mode: multiply;
+  transition: opacity 150ms ease, box-shadow 150ms ease;
+}
+
+.paper-highlight.yellow {
+  background: rgba(250, 204, 21, 0.42);
+}
+
+.paper-highlight.green {
+  background: rgba(74, 222, 128, 0.34);
+}
+
+.paper-highlight.blue {
+  background: rgba(96, 165, 250, 0.32);
+}
+
+.paper-highlight.pink {
+  background: rgba(244, 114, 182, 0.32);
+}
+
+.paper-highlight.purple {
+  background: rgba(168, 85, 247, 0.28);
+}
+
+.paper-highlight:hover {
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.18);
+  opacity: 0.92;
+}
+
 .chat {
   background:
     linear-gradient(180deg, #ffffff 0%, #f8fafc 58%, #f4f7fa 100%);
@@ -1744,7 +1786,7 @@ body.resizing-chat {
 .selection-box {
   position: fixed;
   z-index: 90;
-  min-width: 76px;
+  min-width: 110px;
   height: 36px;
   margin: 0;
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -1835,6 +1877,98 @@ body.resizing-chat {
   transform: translateX(-50%) rotate(45deg);
 }
 
+.selection-highlight-group {
+  position: relative;
+  display: inline-flex;
+}
+
+.selection-highlight-btn {
+  box-shadow: inset 1px 0 rgba(255, 255, 255, 0.13);
+}
+
+.selection-highlight-btn::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 9px;
+  width: 13px;
+  height: 17px;
+  border: 2px solid white;
+  border-radius: 4px 4px 2px 2px;
+  transform: rotate(12deg);
+}
+
+.selection-highlight-btn::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  width: 16px;
+  height: 3px;
+  border-radius: 999px;
+  background: #facc15;
+}
+
+.highlight-palette {
+  position: absolute;
+  left: 50%;
+  bottom: 42px;
+  transform: translateX(-50%) translateY(4px);
+  display: flex;
+  gap: 6px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.98);
+  padding: 6px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.selection-highlight-group:hover .highlight-palette,
+.selection-highlight-group:focus-within .highlight-palette {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+.highlight-color-btn {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 999px;
+  padding: 0;
+  box-shadow: none;
+}
+
+.highlight-color-btn.yellow {
+  background: #fde047;
+}
+
+.highlight-color-btn.green {
+  background: #86efac;
+}
+
+.highlight-color-btn.blue {
+  background: #93c5fd;
+}
+
+.highlight-color-btn.pink {
+  background: #f9a8d4;
+}
+
+.highlight-color-btn.purple {
+  background: #c4b5fd;
+}
+
+.highlight-color-btn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
+}
+
 .selection-action-btn:hover {
   background: rgba(255, 255, 255, 0.09);
   transform: scale(1.04);
@@ -1842,6 +1976,34 @@ body.resizing-chat {
 
 .selection-action-btn:active {
   transform: scale(0.96);
+}
+
+.highlight-answer-card {
+  position: fixed;
+  z-index: 120;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(360px, calc(100dvh - 80px));
+  overflow: auto;
+  transform: translateX(-50%);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.98);
+  color: var(--text);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
+  padding: 12px 14px;
+}
+
+.highlight-answer-card strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.highlight-answer-card .markdown-body {
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 @keyframes selection-pop {
