@@ -13,6 +13,7 @@ const DEFAULT_PROMPT_TEMPLATES = [
 
 const CONVERSATION_DRAFTS_KEY = "paperCodexConversationDrafts";
 const RECENT_PAPERS_KEY = "paperCodexRecentPapers";
+const READING_STATE_KEY = "paperCodexReadingState";
 const RECENT_PAPER_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MAX_MESSAGE_ATTACHMENTS = 8;
 const MAX_MESSAGE_ATTACHMENT_BYTES = 20 * 1024 * 1024;
@@ -59,6 +60,8 @@ const state = {
   promptTemplates: loadPromptTemplates(),
   conversationDrafts: loadConversationDrafts(),
   recentPapers: loadRecentPapers(),
+  readingState: loadReadingState(),
+  restoringPaperId: null,
   conversationAttachmentDrafts: {},
   editingPromptId: null,
   editingTaskId: null,
@@ -479,7 +482,9 @@ async function loadPapers() {
   renderPapers();
   renderRecentPapers();
   if (!state.activePaper && state.papers.length) {
-    await selectPaper(state.papers[0].id);
+    const savedPaperId = state.readingState?.paperId;
+    const paper = state.papers.find((item) => item.id === savedPaperId) || state.papers[0];
+    await selectPaper(paper.id, { restoreReadingState: paper.id === savedPaperId });
   }
   updateContextHint();
 }
@@ -547,6 +552,20 @@ function loadRecentPapers() {
 
 function saveRecentPapers() {
   localStorage.setItem(RECENT_PAPERS_KEY, JSON.stringify(state.recentPapers.slice(0, 30)));
+}
+
+function loadReadingState() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(READING_STATE_KEY) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveReadingState(patch = {}) {
+  state.readingState = { ...state.readingState, ...patch, updatedAt: Date.now() };
+  localStorage.setItem(READING_STATE_KEY, JSON.stringify(state.readingState));
 }
 
 function recordRecentPaper(paperId) {
@@ -788,13 +807,15 @@ async function importPaper() {
   }
 }
 
-async function selectPaper(paperId) {
+async function selectPaper(paperId, options = {}) {
+  saveCurrentReadingPosition();
   resetShellScroll();
   clearConversationSelections();
   state.activePaper = state.papers.find((paper) => paper.id === paperId) || null;
   state.selectedLibraryPaperId = state.activePaper?.id || state.selectedLibraryPaperId;
   if (state.activePaper) {
     recordRecentPaper(state.activePaper.id);
+    saveReadingState({ paperId: state.activePaper.id });
   }
   renderPapers();
   renderConversations();
@@ -803,7 +824,10 @@ async function selectPaper(paperId) {
   clearSelection();
   if (state.activePaper) {
     await loadHighlights(state.activePaper.id);
+    state.restoringPaperId = options.restoreReadingState ? state.activePaper.id : null;
+    if (state.restoringPaperId) restoreSavedZoomState();
     await renderPdf(`/api/papers/${state.activePaper.id}/file`);
+    state.restoringPaperId = null;
   } else {
     state.pdfDoc = null;
     state.pdfUrl = "";
@@ -1876,7 +1900,7 @@ async function renderPdfPages(token = ++state.pdfRenderToken) {
   const viewer = $("pdfViewer");
   const pdf = state.pdfDoc;
   if (!pdf) return;
-  const anchor = getPdfScrollAnchor();
+  const anchor = getRestoreAnchor();
   const firstPage = await pdf.getPage(1);
   const firstViewport = firstPage.getViewport({ scale: 1 });
   const fitScale = Math.max(0.45, Math.min(2.6, (viewer.clientWidth - 72) / firstViewport.width));
@@ -1902,6 +1926,13 @@ async function renderPdfPages(token = ++state.pdfRenderToken) {
   restorePdfScrollAnchor(anchor);
   setupPageObserver(token);
   queueVisiblePages(token);
+}
+
+function getRestoreAnchor() {
+  if (state.restoringPaperId && state.readingState?.paperId === state.restoringPaperId && state.readingState?.anchor) {
+    return state.readingState.anchor;
+  }
+  return getPdfScrollAnchor();
 }
 
 function resetPageRendering() {
@@ -2003,6 +2034,31 @@ function restorePdfScrollAnchor(anchor) {
   viewer.scrollTop = clamp(target, 0, viewer.scrollHeight - viewer.clientHeight);
 }
 
+function saveCurrentReadingPosition() {
+  if (!state.activePaper || !state.pdfDoc) return;
+  saveReadingState({
+    paperId: state.activePaper.id,
+    anchor: getPdfScrollAnchor(),
+    zoomMode: state.zoomMode,
+    zoom: state.zoom,
+  });
+}
+
+function scheduleReadingPositionSave() {
+  window.clearTimeout(scheduleReadingPositionSave._timer);
+  scheduleReadingPositionSave._timer = window.setTimeout(saveCurrentReadingPosition, 180);
+}
+
+function restoreSavedZoomState() {
+  const mode = state.readingState?.zoomMode;
+  if (mode === "fit") {
+    state.zoomMode = "fit";
+  } else if (mode === "custom") {
+    state.zoomMode = "custom";
+    state.zoom = clamp(Number(state.readingState.zoom) || 1, 0.45, 3);
+  }
+}
+
 function setZoomMode(mode) {
   if (!state.pdfDoc) return;
   state.zoomMode = mode;
@@ -2010,6 +2066,7 @@ function setZoomMode(mode) {
     state.zoomMode = "custom";
     state.zoom = 1;
   }
+  saveCurrentReadingPosition();
   renderPdfPages().catch((error) => toast(error.message, 7000));
 }
 
@@ -2017,6 +2074,7 @@ function zoomBy(multiplier) {
   if (!state.pdfDoc) return;
   state.zoomMode = "custom";
   state.zoom = clamp((state.currentScale || state.zoom || 1) * multiplier, 0.45, 3);
+  saveCurrentReadingPosition();
   renderPdfPages().catch((error) => toast(error.message, 7000));
 }
 
@@ -3261,7 +3319,10 @@ function bindEvents() {
     addAttachmentFiles(files, "drop");
   });
   $("pdfViewer").addEventListener("mouseup", () => window.setTimeout(handleSelection, 20));
-  $("pdfViewer").addEventListener("scroll", scheduleSelectionBoxSync, { passive: true });
+  $("pdfViewer").addEventListener("scroll", () => {
+    scheduleSelectionBoxSync();
+    scheduleReadingPositionSave();
+  }, { passive: true });
   window.addEventListener("resize", scheduleSelectionBoxSync);
   $("selectionBox").addEventListener("mousedown", (event) => event.preventDefault());
   $("selectionBox").addEventListener("pointerenter", () => window.clearTimeout(state.highlightHoverTimer));
@@ -3358,11 +3419,11 @@ function bindEvents() {
 }
 
 bindEvents();
-window.addEventListener("load", resetShellScroll);
 window.addEventListener("resize", () => {
   applyPanelState();
   applyChatWidth(state.chatWidth, { persist: true });
   rerenderPdfSoon();
 });
 window.addEventListener("keydown", handleGlobalShortcuts);
+window.addEventListener("beforeunload", saveCurrentReadingPosition);
 loadInitialData().catch((error) => toast(error.message, 7000));
