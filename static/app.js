@@ -68,6 +68,7 @@ const state = {
   editingTaskId: null,
   editingResendMessageId: null,
   composingMessage: false,
+  composerFocusUntil: 0,
   slashMenuIndex: 0,
   slashMenuSignature: "",
   selectionPositionFrame: 0,
@@ -1654,6 +1655,26 @@ function focusMessageInput({ moveCaretToEnd = true } = {}) {
     applyFocus();
     window.setTimeout(applyFocus, 0);
   });
+}
+
+function requestComposerFocusReturn(duration = 900) {
+  state.composerFocusUntil = Math.max(state.composerFocusUntil, Date.now() + duration);
+  [0, 16, 80, 220].forEach((delay) => {
+    window.setTimeout(() => {
+      if (Date.now() <= state.composerFocusUntil) {
+        focusMessageInput();
+      }
+    }, delay);
+  });
+}
+
+function settleComposerFocusReturn() {
+  if (Date.now() > state.composerFocusUntil) return;
+  focusMessageInput();
+  window.setTimeout(() => {
+    focusMessageInput();
+    state.composerFocusUntil = 0;
+  }, 40);
 }
 
 function updateComposerMode() {
@@ -3492,7 +3513,8 @@ function bindEvents() {
     }
     if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
       event.preventDefault();
-      sendMessage();
+      requestComposerFocusReturn();
+      sendMessage().finally(settleComposerFocusReturn);
     }
   });
   $("messages").addEventListener("scroll", scheduleConversationPositionSave, { passive: true });
