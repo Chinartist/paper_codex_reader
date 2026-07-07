@@ -1640,6 +1640,22 @@ function cancelResendEdit() {
   updateComposerMode();
 }
 
+function focusMessageInput({ moveCaretToEnd = true } = {}) {
+  const input = $("messageInput");
+  if (!input) return;
+  const applyFocus = () => {
+    input.focus({ preventScroll: true });
+    if (moveCaretToEnd && typeof input.setSelectionRange === "function") {
+      const end = input.value.length;
+      input.setSelectionRange(end, end);
+    }
+  };
+  window.requestAnimationFrame(() => {
+    applyFocus();
+    window.setTimeout(applyFocus, 0);
+  });
+}
+
 function updateComposerMode() {
   const editing = Boolean(state.editingResendMessageId);
   $("composer").classList.toggle("resend-editing", editing);
@@ -1707,6 +1723,7 @@ async function sendMessage() {
   const selectedText = buildSelectedText(snippets);
   if (!content && !selectedText && !attachments.length) {
     toast("请输入问题，或先添加论文选区、图片或文件");
+    focusMessageInput({ moveCaretToEnd: false });
     return;
   }
   await ensureConversation();
@@ -1716,6 +1733,7 @@ async function sendMessage() {
     attachmentPayload = await buildAttachmentPayload(attachments);
   } catch (error) {
     toast(error.message || "读取附件失败", 7000);
+    focusMessageInput({ moveCaretToEnd: false });
     return;
   }
   const payload = {
@@ -1732,6 +1750,7 @@ async function sendMessage() {
   clearAttachments({ persist: false });
   clearDraftForConversation(convId);
   scrollMessages();
+  focusMessageInput();
   try {
     await api(`/api/conversations/${convId}/messages`, {
       method: "POST",
@@ -1743,13 +1762,13 @@ async function sendMessage() {
     state.editingResendMessageId = null;
     updateComposerMode();
     toast("问题已加入队列");
-    $("messageInput").focus();
   } catch (error) {
     if (state.activeConversation?.id === convId) {
       appendMessage("assistant", `出错了：${error.message}`);
     }
     toast(error.message, 9000);
-    $("messageInput").focus();
+  } finally {
+    focusMessageInput();
   }
 }
 
