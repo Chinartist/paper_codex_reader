@@ -12,6 +12,8 @@ const DEFAULT_PROMPT_TEMPLATES = [
 ];
 
 const CONVERSATION_DRAFTS_KEY = "paperCodexConversationDrafts";
+const MAX_MESSAGE_ATTACHMENTS = 8;
+const MAX_MESSAGE_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 
 const state = {
   papers: [],
@@ -21,6 +23,7 @@ const state = {
   selectedText: "",
   selectedPage: null,
   selectedSnippets: [],
+  pendingAttachments: [],
   selectedFile: null,
   settings: {},
   busy: false,
@@ -47,6 +50,7 @@ const state = {
   chatCollapsed: localStorage.getItem("paperCodexChatCollapsed") === "true",
   promptTemplates: loadPromptTemplates(),
   conversationDrafts: loadConversationDrafts(),
+  conversationAttachmentDrafts: {},
   editingPromptId: null,
   editingTaskId: null,
   editingResendMessageId: null,
@@ -317,6 +321,7 @@ function saveActiveConversationDraft() {
     message: $("messageInput")?.value || "",
     snippets: state.selectedSnippets.map((item) => ({ ...item })),
   };
+  state.conversationAttachmentDrafts[key] = state.pendingAttachments.map((item) => ({ ...item }));
   persistConversationDrafts();
 }
 
@@ -325,12 +330,17 @@ function restoreActiveConversationDraft() {
   const draft = key ? state.conversationDrafts[key] : null;
   $("messageInput").value = draft?.message || "";
   state.selectedSnippets = draft?.snippets ? draft.snippets.map((item) => ({ ...item })) : [];
+  state.pendingAttachments = key && state.conversationAttachmentDrafts[key]
+    ? state.conversationAttachmentDrafts[key].map((item) => ({ ...item }))
+    : [];
   renderSelectedContexts();
+  renderAttachments();
 }
 
 function clearDraftForConversation(conversationId) {
   if (!conversationId) return;
   delete state.conversationDrafts[`conversation:${conversationId}`];
+  delete state.conversationAttachmentDrafts[`conversation:${conversationId}`];
   persistConversationDrafts();
 }
 
@@ -1128,6 +1138,7 @@ async function deleteConversation(conversationId) {
       $("activeConversationTitle").textContent = "";
       $("messageInput").value = "";
       clearConversationSelections({ persist: false });
+      clearAttachments({ persist: false });
     }
     await loadConversations();
     if (!state.activeConversation) {
@@ -1247,6 +1258,7 @@ function startResendEdit(content, messageId = "") {
   state.editingResendMessageId = messageId || makeId();
   $("messageInput").value = content;
   clearConversationSelections({ persist: false });
+  clearAttachments({ persist: false });
   clearSelection();
   updateComposerMode();
   $("messageInput").focus();
@@ -1298,23 +1310,33 @@ async function initializeConversation() {
 async function sendMessage() {
   const content = $("messageInput").value.trim();
   const snippets = [...state.selectedSnippets];
+  const attachments = [...state.pendingAttachments];
   const selectedText = buildSelectedText(snippets);
-  if (!content && !selectedText) {
-    toast("请输入问题，或先添加一段论文选区");
+  if (!content && !selectedText && !attachments.length) {
+    toast("请输入问题，或先添加论文选区、图片或文件");
     return;
   }
   await ensureConversation();
   const convId = state.activeConversation.id;
+  let attachmentPayload = [];
+  try {
+    attachmentPayload = await buildAttachmentPayload(attachments);
+  } catch (error) {
+    toast(error.message || "读取附件失败", 7000);
+    return;
+  }
   const payload = {
     content,
     selected_text: selectedText,
+    attachments: attachmentPayload,
     paper_id: state.activePaper ? state.activePaper.id : null,
   };
   $("messageInput").value = "";
-  const localVisible = formatLocalVisibleMessage(content, snippets);
+  const localVisible = formatLocalVisibleMessage(content, snippets, attachments);
   appendMessage("user", localVisible);
   clearSelection();
   clearConversationSelections({ persist: false });
+  clearAttachments({ persist: false });
   clearDraftForConversation(convId);
   scrollMessages();
   try {
@@ -2058,12 +2080,122 @@ function buildSelectedText(snippets = state.selectedSnippets) {
     .join("\n\n");
 }
 
-function formatLocalVisibleMessage(content, snippets) {
+function formatLocalVisibleMessage(content, snippets, attachments = []) {
   const selectedText = buildSelectedText(snippets);
-  if (!selectedText) return content;
-  return content
+  const attachmentText = formatAttachmentVisibleText(attachments);
+  const text = selectedText
     ? `${content}\n\n> 已添加论文选区：\n${selectedText}`
-    : `解释已添加的论文选区：\n${selectedText}`;
+    : content;
+  return `${text || ""}${attachmentText}`.trim();
+}
+
+function formatAttachmentVisibleText(attachments) {
+  if (!attachments.length) return "";
+  const rows = attachments.map((item) => `> - ${item.name} (${item.mime || "文件"}, ${formatBytes(item.size)})`);
+  return `\n\n> 附件：\n${rows.join("\n")}`;
+}
+
+function addAttachmentFiles(fileList, source = "file") {
+  const incoming = [...fileList].filter(Boolean);
+  if (!incoming.length) return;
+  const accepted = [];
+  for (const rawFile of incoming) {
+    if (state.pendingAttachments.length + accepted.length >= MAX_MESSAGE_ATTACHMENTS) {
+      toast(`一次最多添加 ${MAX_MESSAGE_ATTACHMENTS} 个附件`);
+      break;
+    }
+    const file = normalizeAttachmentFile(rawFile);
+    if (file.size > MAX_MESSAGE_ATTACHMENT_BYTES) {
+      toast(`${file.name} 超过 20MB，已跳过`, 7000);
+      continue;
+    }
+    const duplicate = [...state.pendingAttachments, ...accepted].some(
+      (item) => item.name === file.name && item.size === file.size && item.mime === (file.type || "application/octet-stream")
+    );
+    if (duplicate) continue;
+    accepted.push({
+      id: makeId(),
+      file,
+      name: file.name,
+      mime: file.type || "application/octet-stream",
+      size: file.size,
+      source,
+    });
+  }
+  if (!accepted.length) return;
+  state.pendingAttachments = [...state.pendingAttachments, ...accepted];
+  renderAttachments();
+  saveActiveConversationDraft();
+  toast(`已添加 ${accepted.length} 个附件`);
+}
+
+function normalizeAttachmentFile(file) {
+  if (file.name) return file;
+  const ext = extensionForMime(file.type);
+  try {
+    return new File([file], `pasted-${Date.now()}${ext}`, { type: file.type || "application/octet-stream" });
+  } catch {
+    file.name = `pasted-${Date.now()}${ext}`;
+    return file;
+  }
+}
+
+function extensionForMime(mime = "") {
+  const map = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "application/pdf": ".pdf",
+    "text/plain": ".txt",
+  };
+  return map[mime] || "";
+}
+
+function renderAttachments() {
+  const tray = $("attachmentTray");
+  if (!tray) return;
+  tray.classList.toggle("hidden", !state.pendingAttachments.length);
+  if (!state.pendingAttachments.length) {
+    tray.innerHTML = "";
+    return;
+  }
+  tray.innerHTML = state.pendingAttachments
+    .map((item) => `
+      <div class="attachment-chip" data-attachment-id="${escapeHtml(item.id)}">
+        <span class="attachment-glyph ${item.mime.startsWith("image/") ? "image" : "file"}" aria-hidden="true"></span>
+        <span class="attachment-main">
+          <strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong>
+          <small>${escapeHtml(item.mime || "文件")} · ${formatBytes(item.size)}</small>
+        </span>
+        <button class="remove-attachment-btn" type="button" aria-label="移除 ${escapeHtml(item.name)}" title="移除"></button>
+      </div>
+    `)
+    .join("");
+}
+
+function removeAttachment(id, options = {}) {
+  state.pendingAttachments = state.pendingAttachments.filter((item) => item.id !== id);
+  renderAttachments();
+  if (options.persist !== false) saveActiveConversationDraft();
+}
+
+function clearAttachments(options = {}) {
+  state.pendingAttachments = [];
+  renderAttachments();
+  if (options.persist !== false) saveActiveConversationDraft();
+}
+
+async function buildAttachmentPayload(attachments) {
+  const payload = [];
+  for (const item of attachments) {
+    payload.push({
+      filename: item.name,
+      mime: item.mime,
+      data_base64: await fileToBase64(item.file),
+    });
+  }
+  return payload;
 }
 
 function selectionLabel(item, index) {
@@ -2073,6 +2205,13 @@ function selectionLabel(item, index) {
 function compactText(value, limit = 120) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
   return text.length > limit ? `${text.slice(0, limit)}...` : text;
+}
+
+function formatBytes(bytes) {
+  const value = Number(bytes) || 0;
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(value > 10 * 1024 ? 0 : 1)} KB`;
+  return `${(value / 1024 / 1024).toFixed(value > 10 * 1024 * 1024 ? 0 : 1)} MB`;
 }
 
 function makeId() {
@@ -2299,7 +2438,26 @@ function bindEvents() {
   $("initializeBtn").addEventListener("click", initializeConversation);
   $("sendBtn").addEventListener("click", sendMessage);
   $("cancelResendEditBtn").addEventListener("click", cancelResendEdit);
+  $("attachFileBtn").addEventListener("click", () => $("messageAttachmentInput").click());
+  $("messageAttachmentInput").addEventListener("change", () => {
+    addAttachmentFiles($("messageAttachmentInput").files, "picker");
+    $("messageAttachmentInput").value = "";
+  });
+  $("attachmentTray").addEventListener("click", (event) => {
+    const button = event.target.closest(".remove-attachment-btn");
+    if (!button) return;
+    const item = button.closest(".attachment-chip");
+    if (item?.dataset.attachmentId) {
+      removeAttachment(item.dataset.attachmentId);
+    }
+  });
   $("messageInput").addEventListener("input", saveActiveConversationDraft);
+  $("messageInput").addEventListener("paste", (event) => {
+    const files = [...(event.clipboardData?.files || [])];
+    if (!files.length) return;
+    event.preventDefault();
+    addAttachmentFiles(files, "paste");
+  });
   $("messageInput").addEventListener("compositionstart", () => {
     state.composingMessage = true;
   });
@@ -2315,6 +2473,22 @@ function bindEvents() {
       event.preventDefault();
       sendMessage();
     }
+  });
+  $("composer").addEventListener("dragover", (event) => {
+    if (![...(event.dataTransfer?.items || [])].some((item) => item.kind === "file")) return;
+    event.preventDefault();
+    $("composer").classList.add("dragging-attachments");
+  });
+  $("composer").addEventListener("dragleave", (event) => {
+    if ($("composer").contains(event.relatedTarget)) return;
+    $("composer").classList.remove("dragging-attachments");
+  });
+  $("composer").addEventListener("drop", (event) => {
+    const files = [...(event.dataTransfer?.files || [])];
+    if (!files.length) return;
+    event.preventDefault();
+    $("composer").classList.remove("dragging-attachments");
+    addAttachmentFiles(files, "drop");
   });
   $("pdfViewer").addEventListener("mouseup", () => window.setTimeout(handleSelection, 20));
   $("pdfViewer").addEventListener("scroll", scheduleSelectionBoxSync, { passive: true });

@@ -413,10 +413,12 @@ class Store:
     def __init__(self, home: pathlib.Path):
         self.home = home
         self.papers_dir = home / "papers"
+        self.attachments_dir = home / "attachments"
         self.db_path = home / "reader.sqlite"
         self.lock = threading.Lock()
         self.home.mkdir(parents=True, exist_ok=True)
         self.papers_dir.mkdir(parents=True, exist_ok=True)
+        self.attachments_dir.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
     def connect(self) -> sqlite3.Connection:
@@ -604,6 +606,39 @@ class Store:
         dest.write_bytes(data)
         name = title or pathlib.Path(filename).stem
         return self._insert_paper(paper_id, name, dest, f"upload:{filename}")
+
+    def save_message_attachments(self, conv_id: str, attachments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not attachments:
+            return []
+        if len(attachments) > 8:
+            raise ValueError("最多一次附加 8 个文件。")
+        saved: List[Dict[str, Any]] = []
+        conv_dir = self.attachments_dir / slugify(conv_id)
+        conv_dir.mkdir(parents=True, exist_ok=True)
+        for index, item in enumerate(attachments, start=1):
+            filename = str(item.get("filename") or item.get("name") or f"attachment-{index}").strip()
+            data_base64 = str(item.get("data_base64") or "").strip()
+            if not data_base64:
+                raise ValueError(f"附件 {filename or index} 没有文件数据。")
+            try:
+                data = base64.b64decode(data_base64, validate=True)
+            except Exception as exc:
+                raise ValueError(f"附件 {filename or index} 数据无效。") from exc
+            if len(data) > 20 * 1024 * 1024:
+                raise ValueError(f"附件 {filename or index} 超过 20MB。")
+            safe_name = slugify(filename or f"attachment-{index}")
+            dest = conv_dir / f"{now_iso().replace(':', '').replace('.', '')}-{index}-{safe_name}"
+            dest.write_bytes(data)
+            mime = str(item.get("mime") or mimetypes.guess_type(filename)[0] or "application/octet-stream")
+            saved.append(
+                {
+                    "filename": filename or safe_name,
+                    "mime": mime,
+                    "size": len(data),
+                    "path": str(dest.resolve()),
+                }
+            )
+        return saved
 
     def _insert_paper(self, paper_id: str, title: str, path: pathlib.Path, source: str) -> Dict[str, Any]:
         created = now_iso()
@@ -1277,6 +1312,30 @@ def selected_text_prompt(title: str, selected_text: str, user_note: str = "") ->
     )
 
 
+def attachments_prompt_block(attachments: List[Dict[str, Any]]) -> str:
+    if not attachments:
+        return ""
+    lines = [
+        "用户随这条消息附加了以下本地文件。请把它们作为上下文读取；"
+        "图片请观察内容，PDF/文本/代码/数据文件请按路径读取。"
+    ]
+    for index, item in enumerate(attachments, start=1):
+        lines.append(
+            f"\n[附件 {index}] {item['filename']}\n"
+            f"类型：{item['mime']}\n"
+            f"大小：{item['size']} bytes\n"
+            f"本地路径：{item['path']}"
+        )
+    return "\n\n" + "\n".join(lines)
+
+
+def attachments_visible_block(attachments: List[Dict[str, Any]]) -> str:
+    if not attachments:
+        return ""
+    rows = [f"> - {item['filename']} ({item['mime']}, {item['size']} bytes)" for item in attachments]
+    return "\n\n> 附件：\n" + "\n".join(rows)
+
+
 def latest_codex_session_id() -> Optional[str]:
     index_path = pathlib.Path.home() / ".codex" / "session_index.jsonl"
     if not index_path.exists():
@@ -1502,17 +1561,21 @@ class AppHandler(SimpleHTTPRequestHandler):
         data = read_json(self)
         content = (data.get("content") or "").strip()
         selected = (data.get("selected_text") or "").strip()
+        attachments = self.store.save_message_attachments(conv_id, data.get("attachments") or [])
+        attachment_prompt = attachments_prompt_block(attachments)
+        attachment_visible = attachments_visible_block(attachments)
         paper_title = ""
         paper_id = data.get("paper_id") or conv.get("paper_id")
         if paper_id:
             paper = self.store.get_paper(paper_id)
             paper_title = paper["title"] if paper else ""
         if selected:
-            prompt = selected_text_prompt(paper_title or "当前论文", selected, content)
+            prompt = selected_text_prompt(paper_title or "当前论文", selected, content) + attachment_prompt
             visible = f"{content}\n\n> 选中文本：\n{selected}" if content else f"解释选中文本：\n{selected}"
         else:
-            prompt = content
+            prompt = content + attachment_prompt
             visible = content
+        visible = (visible + attachment_visible).strip()
         if not prompt.strip():
             raise ValueError("Message is empty.")
         user_msg = self.store.add_message(conv_id, "user", visible)

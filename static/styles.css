@@ -1663,6 +1663,151 @@ body.resizing-chat {
   box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
 }
 
+.attachment-tray {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0 1px;
+  scrollbar-width: thin;
+}
+
+.attachment-chip {
+  flex: 0 0 auto;
+  min-width: 190px;
+  max-width: 280px;
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f3f6f8 100%);
+  padding: 8px 8px 8px 10px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+}
+
+.attachment-glyph {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: #e7edf4;
+  color: #344256;
+}
+
+.attachment-glyph::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 7px;
+  width: 13px;
+  height: 18px;
+  border: 1.8px solid currentColor;
+  border-radius: 3px;
+}
+
+.attachment-glyph::after {
+  content: "";
+  position: absolute;
+  right: 9px;
+  top: 7px;
+  width: 6px;
+  height: 6px;
+  border-left: 1.8px solid currentColor;
+  border-bottom: 1.8px solid currentColor;
+  background: #e7edf4;
+}
+
+.attachment-glyph.image {
+  background: #e8f7f3;
+  color: #0f766e;
+}
+
+.attachment-glyph.image::before {
+  left: 8px;
+  top: 9px;
+  width: 18px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.attachment-glyph.image::after {
+  left: 12px;
+  top: 18px;
+  width: 11px;
+  height: 7px;
+  border: 0;
+  border-left: 2px solid currentColor;
+  border-top: 2px solid currentColor;
+  background: transparent;
+  transform: rotate(45deg);
+}
+
+.attachment-main {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.attachment-main strong,
+.attachment-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-main strong {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.attachment-main small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.remove-attachment-btn {
+  position: relative;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: #64748b;
+  box-shadow: none;
+}
+
+.remove-attachment-btn::before,
+.remove-attachment-btn::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 13px;
+  height: 1.7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.remove-attachment-btn::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.remove-attachment-btn::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.remove-attachment-btn:hover:not(:disabled) {
+  color: var(--danger);
+  background: #fff1f2;
+}
+
 .context-tray-head {
   display: flex;
   align-items: center;
@@ -1743,6 +1888,12 @@ body.resizing-chat {
   align-items: center;
   background: rgba(247, 249, 252, 0.96);
   box-shadow: 0 -10px 28px rgba(15, 23, 42, 0.055);
+  transition: background 180ms ease, box-shadow 180ms ease;
+}
+
+.composer.dragging-attachments {
+  background: #eefaf7;
+  box-shadow: inset 0 0 0 2px rgba(13, 148, 136, 0.32), 0 -10px 28px rgba(13, 148, 136, 0.08);
 }
 
 .composer textarea {
@@ -1788,11 +1939,12 @@ body.resizing-chat {
 .prompt-dock {
   position: absolute;
   left: 12px;
-  bottom: 18px;
+  bottom: 62px;
   z-index: 12;
 }
 
-.prompt-tab {
+.prompt-tab,
+.attach-tab {
   position: relative;
   min-width: 36px;
   width: 36px;
@@ -1820,15 +1972,46 @@ body.resizing-chat {
 }
 
 .prompt-tab::after {
-  transform: translate(-50%, -50%) rotate(90deg);
+  display: none;
+}
+
+.prompt-tab::before {
+  width: 16px;
+  box-shadow: 0 -5px 0 currentColor, 0 5px 0 currentColor;
 }
 
 .prompt-tab:hover:not(:disabled),
-.prompt-dock:focus-within .prompt-tab {
+.prompt-dock:focus-within .prompt-tab,
+.attach-tab:hover:not(:disabled),
+.attach-dock:focus-within .attach-tab {
   background: #eceff3;
   border-color: transparent;
   color: #1f2937;
   box-shadow: none;
+}
+
+.attach-dock {
+  position: absolute;
+  left: 12px;
+  bottom: 18px;
+  z-index: 11;
+}
+
+.attach-tab::before,
+.attach-tab::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 15px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+}
+
+.attach-tab::after {
+  transform: translate(-50%, -50%) rotate(90deg);
 }
 
 .prompt-panel {
