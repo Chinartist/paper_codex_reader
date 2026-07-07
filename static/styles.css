@@ -1537,10 +1537,78 @@ body.resizing-chat {
   transform: rotate(-42deg);
 }
 
-.message pre {
-  white-space: pre-wrap;
+.message-body {
   margin: 0;
-  font-family: inherit;
+  color: inherit;
+}
+
+.plain-message {
+  white-space: pre-wrap;
+}
+
+.markdown-body {
+  display: grid;
+  gap: 10px;
+}
+
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body blockquote,
+.markdown-body pre,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5 {
+  margin: 0;
+}
+
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5 {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 680;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 20px;
+}
+
+.markdown-body li + li {
+  margin-top: 4px;
+}
+
+.markdown-body blockquote {
+  border-left: 2px solid #cbd5e1;
+  color: #475569;
+  padding-left: 10px;
+}
+
+.markdown-body code {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.055);
+  padding: 1px 5px;
+  color: #0f172a;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.92em;
+}
+
+.markdown-body pre {
+  overflow: auto;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 10px 12px;
+}
+
+.markdown-body pre code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  white-space: pre;
 }
 
 .selection-box {
@@ -1647,6 +1715,43 @@ body.resizing-chat {
   overflow-x: auto;
   padding: 1px 0;
   scrollbar-width: thin;
+}
+
+.send-preview {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  overflow-x: auto;
+  padding: 1px 0 3px;
+  scrollbar-width: thin;
+}
+
+.send-preview-label,
+.send-preview-pill {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.send-preview-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.send-preview-pill {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(248, 250, 252, 0.92);
+  color: #334155;
+  padding: 7px 10px;
+  font-size: 11px;
+  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.035);
 }
 
 .attachment-chip {
@@ -1790,6 +1895,59 @@ body.resizing-chat {
 .remove-attachment-btn:hover:not(:disabled) {
   color: var(--danger);
   background: #fff1f2;
+}
+
+.slash-menu {
+  grid-column: 1 / -1;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
+  padding: 6px;
+  display: grid;
+  gap: 3px;
+  max-height: 232px;
+  overflow: auto;
+}
+
+.slash-item {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  padding: 8px 10px;
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  box-shadow: none;
+}
+
+.slash-item strong,
+.slash-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slash-item strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.slash-item span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.slash-item:hover,
+.slash-item.active {
+  border-color: rgba(37, 99, 235, 0.16);
+  background: #f3f7ff;
+  box-shadow: none;
 }
 
 .context-tray-head {

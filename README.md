@@ -128,11 +128,14 @@ file:///C:/Users/me/Documents/paper.pdf
 - Ask questions directly, with or without selected PDF passages.
 - Attach images or files by pasting, dragging, or choosing from the file picker. Context pills distinguish image inputs from Codex-style `@file` references.
 - Image attachments are sent to Codex with `--image`; non-image files are referenced with Codex-style `@file` paths.
+- Attachment file copies are temporary: after Codex successfully processes a message, the app keeps the history record but removes the temporary attachment copy.
 - Use compact model and reasoning controls directly in the composer.
+- Preview the target conversation, Codex session mode, selected passages, and attachments before sending.
 - When the current conversation is running and the composer is empty, the send button becomes a stop button.
 - Use `读全文` to send the current PDF path as a Codex-style `@file` reference and let the same conversation read the whole paper.
 - For selected passages, the default prompt asks Codex to translate first and then analyze briefly.
 - Add multiple selected passages to one message before sending.
+- Assistant replies render common Markdown such as lists, quotes, inline code, and code blocks.
 
 ### Conversations And Tasks
 
@@ -149,15 +152,21 @@ file:///C:/Users/me/Documents/paper.pdf
 - Use the prompt dock beside the composer for reusable prompts.
 - Built-in prompts include `总结当前论文` and `给我阅读路线`.
 - Add, edit, delete, and reuse your own prompt templates.
+- Type `/` in an empty composer line to open the prompt command menu.
 
 ## Keyboard Shortcuts
 
-Global shortcuts are ignored while typing in an input, textarea, select, or editable field.
+Most reader shortcuts are ignored while typing in an input, textarea, select, or editable field.
 
 | Shortcut | Action |
 | --- | --- |
-| `Enter` in the chat box | Send the current message |
-| `Shift+Enter` in the chat box | Insert a new line |
+| `Enter` in the chat box | Insert a new line |
+| `Cmd/Ctrl + Enter` in the chat box | Send the current message |
+| `/` at the start of the chat box | Open the prompt command menu |
+| `ArrowUp/Down` in the prompt command menu | Move between prompts |
+| `Enter` in the prompt command menu | Insert the selected prompt |
+| `Escape` | Close transient UI such as selection and prompt menus |
+| `Cmd/Ctrl + Shift + S` | Stop the active running task for the current conversation |
 | `Cmd/Ctrl + +` or `Cmd/Ctrl + =` | Zoom in |
 | `Cmd/Ctrl + -` | Zoom out |
 | `Cmd/Ctrl + 0` | Set PDF zoom to 100% |

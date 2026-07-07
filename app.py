@@ -1408,7 +1408,7 @@ def attachments_visible_block(attachments: List[Dict[str, Any]]) -> str:
     if not attachments:
         return ""
     rows = [f"> - {item['filename']} ({item['mime']}, {item['size']} bytes)" for item in attachments]
-    return "\n\n> 附件：\n" + "\n".join(rows)
+    return "\n\n> 附件记录（临时副本会在 Codex 成功处理后清理）：\n" + "\n".join(rows)
 
 
 def latest_codex_session_id() -> Optional[str]:

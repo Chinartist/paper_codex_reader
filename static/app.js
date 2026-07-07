@@ -55,6 +55,7 @@ const state = {
   editingTaskId: null,
   editingResendMessageId: null,
   composingMessage: false,
+  slashMenuIndex: 0,
   selectionPositionFrame: 0,
   draggingTaskId: null,
   draggingFolderKey: null,
@@ -1225,7 +1226,7 @@ function appendMessage(role, content, meta = {}) {
   }
   node.innerHTML = `
     <div class="role">${role === "user" ? "你" : "Codex"}</div>
-    <pre>${escapeHtml(content)}</pre>
+    ${renderMessageContent(role, content)}
     ${["user", "assistant"].includes(role) ? `
       <div class="message-actions" aria-label="消息操作">
         <button class="message-action-btn copy-message-btn" type="button" aria-label="复制" title="复制"></button>
@@ -1240,6 +1241,127 @@ function appendMessage(role, content, meta = {}) {
     node.querySelector(".edit-message-btn").addEventListener("click", () => startResendEdit(content, meta.id || ""));
   }
   box.appendChild(node);
+}
+
+function renderMessageContent(role, content) {
+  if (role === "assistant") {
+    return `<div class="message-body markdown-body">${markdownToHtml(content)}</div>`;
+  }
+  return `<div class="message-body plain-message">${escapeHtml(content)}</div>`;
+}
+
+function markdownToHtml(value) {
+  const lines = String(value || "").replace(/\r\n/g, "\n").split("\n");
+  const html = [];
+  let index = 0;
+  let inCode = false;
+  let codeLines = [];
+  let listType = "";
+
+  const closeList = () => {
+    if (!listType) return;
+    html.push(`</${listType}>`);
+    listType = "";
+  };
+
+  const flushCode = () => {
+    html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+    codeLines = [];
+  };
+
+  while (index < lines.length) {
+    const raw = lines[index];
+    const line = raw.trimEnd();
+
+    if (line.startsWith("```")) {
+      if (inCode) {
+        flushCode();
+        inCode = false;
+      } else {
+        closeList();
+        inCode = true;
+        codeLines = [];
+      }
+      index += 1;
+      continue;
+    }
+
+    if (inCode) {
+      codeLines.push(raw);
+      index += 1;
+      continue;
+    }
+
+    if (!line.trim()) {
+      closeList();
+      index += 1;
+      continue;
+    }
+
+    const heading = /^(#{1,3})\s+(.+)$/.exec(line);
+    if (heading) {
+      closeList();
+      const level = heading[1].length + 2;
+      html.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
+      index += 1;
+      continue;
+    }
+
+    if (line.startsWith(">")) {
+      closeList();
+      const quoteLines = [];
+      while (index < lines.length && lines[index].trimStart().startsWith(">")) {
+        quoteLines.push(lines[index].trimStart().replace(/^>\s?/, ""));
+        index += 1;
+      }
+      html.push(`<blockquote>${quoteLines.map((item) => inlineMarkdown(item)).join("<br>")}</blockquote>`);
+      continue;
+    }
+
+    const unordered = /^[-*]\s+(.+)$/.exec(line);
+    const ordered = /^\d+[.)]\s+(.+)$/.exec(line);
+    if (unordered || ordered) {
+      const nextType = unordered ? "ul" : "ol";
+      if (listType !== nextType) {
+        closeList();
+        listType = nextType;
+        html.push(`<${listType}>`);
+      }
+      html.push(`<li>${inlineMarkdown((unordered || ordered)[1])}</li>`);
+      index += 1;
+      continue;
+    }
+
+    closeList();
+    const paragraph = [line.trim()];
+    index += 1;
+    while (index < lines.length) {
+      const next = lines[index].trimEnd();
+      if (
+        !next.trim()
+        || next.startsWith("```")
+        || next.startsWith(">")
+        || /^(#{1,3})\s+/.test(next)
+        || /^[-*]\s+/.test(next)
+        || /^\d+[.)]\s+/.test(next)
+      ) {
+        break;
+      }
+      paragraph.push(next.trim());
+      index += 1;
+    }
+    html.push(`<p>${inlineMarkdown(paragraph.join(" "))}</p>`);
+  }
+
+  if (inCode) flushCode();
+  closeList();
+  return html.join("");
+}
+
+function inlineMarkdown(value) {
+  return escapeHtml(value)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
 }
 
 async function copyMessageContent(content) {
@@ -1786,9 +1908,28 @@ function rerenderPdfSoon() {
 function handleGlobalShortcuts(event) {
   const tag = event.target?.tagName;
   const isEditing = ["INPUT", "TEXTAREA", "SELECT"].includes(tag) || event.target?.isContentEditable;
-  if (isEditing) return;
   const key = event.key.toLowerCase();
   const withCommand = event.metaKey || event.ctrlKey;
+
+  if (key === "escape") {
+    if (isSlashMenuOpen()) closeSlashMenu();
+    clearSelection();
+    return;
+  }
+  if (withCommand && event.shiftKey && key === "s") {
+    const task = state.activeConversation ? activeTaskForConversation(state.activeConversation.id) : null;
+    if (task && ["running", "canceling"].includes(task.status)) {
+      event.preventDefault();
+      cancelTask(task.id);
+    }
+    return;
+  }
+  if (withCommand && key === "enter") {
+    event.preventDefault();
+    handleComposerAction();
+    return;
+  }
+  if (isEditing) return;
 
   if (withCommand && (key === "+" || key === "=")) {
     event.preventDefault();
@@ -2026,7 +2167,71 @@ function usePromptTemplate(promptId) {
   if (!prompt) return;
   $("messageInput").value = prompt.prompt;
   saveActiveConversationDraft();
+  closeSlashMenu();
+  updateButtons();
   $("messageInput").focus();
+}
+
+function renderSlashMenuFromInput() {
+  const menu = $("slashMenu");
+  const input = $("messageInput");
+  if (!menu || !input) return;
+  const value = input.value;
+  const firstLine = value.split(/\n/)[0] || "";
+  if (!firstLine.startsWith("/") || value.trimStart() !== value || state.editingResendMessageId) {
+    closeSlashMenu();
+    return;
+  }
+  const query = firstLine.slice(1).trim().toLowerCase();
+  const matches = state.promptTemplates
+    .filter((item) => {
+      const haystack = `${item.title} ${item.prompt}`.toLowerCase();
+      return !query || haystack.includes(query);
+    })
+    .slice(0, 6);
+  if (!matches.length) {
+    closeSlashMenu();
+    return;
+  }
+  state.slashMenuIndex = Math.min(state.slashMenuIndex, matches.length - 1);
+  menu.innerHTML = matches
+    .map((item, index) => `
+      <button class="slash-item ${index === state.slashMenuIndex ? "active" : ""}" type="button" role="option" aria-selected="${index === state.slashMenuIndex ? "true" : "false"}" data-prompt-id="${escapeHtml(item.id)}">
+        <strong>${escapeHtml(item.title)}</strong>
+        <span>${escapeHtml(compactText(item.prompt, 86))}</span>
+      </button>
+    `)
+    .join("");
+  menu.classList.remove("hidden");
+}
+
+function closeSlashMenu() {
+  const menu = $("slashMenu");
+  if (!menu) return;
+  menu.classList.add("hidden");
+  menu.innerHTML = "";
+  state.slashMenuIndex = 0;
+}
+
+function isSlashMenuOpen() {
+  return Boolean($("slashMenu") && !$("slashMenu").classList.contains("hidden"));
+}
+
+function selectSlashPromptByIndex() {
+  const items = [...$("slashMenu").querySelectorAll(".slash-item")];
+  const item = items[state.slashMenuIndex] || items[0];
+  if (item?.dataset.promptId) {
+    usePromptTemplate(item.dataset.promptId);
+    return true;
+  }
+  return false;
+}
+
+function moveSlashMenuSelection(delta) {
+  const items = [...$("slashMenu").querySelectorAll(".slash-item")];
+  if (!items.length) return;
+  state.slashMenuIndex = (state.slashMenuIndex + delta + items.length) % items.length;
+  renderSlashMenuFromInput();
 }
 
 function openPromptForm(promptId = null) {
@@ -2116,7 +2321,11 @@ function formatLocalVisibleMessage(content, snippets, attachments = []) {
 function formatAttachmentVisibleText(attachments) {
   if (!attachments.length) return "";
   const rows = attachments.map((item) => `> - ${item.name} (${item.mime || "文件"}, ${formatBytes(item.size)})`);
-  return `\n\n> 附件：\n${rows.join("\n")}`;
+  return `\n\n> 附件记录（临时副本会在 Codex 成功处理后清理）：\n${rows.join("\n")}`;
+}
+
+function isImageAttachmentItem(item) {
+  return String(item?.mime || "").startsWith("image/");
 }
 
 function addAttachmentFiles(fileList, source = "file") {
@@ -2186,16 +2395,23 @@ function renderAttachments() {
     return;
   }
   tray.innerHTML = state.pendingAttachments
-    .map((item) => `
-      <div class="attachment-chip ${item.mime.startsWith("image/") ? "image" : "file"}" data-attachment-id="${escapeHtml(item.id)}">
+    .map((item) => {
+      const isImage = isImageAttachmentItem(item);
+      const transport = isImage ? "--image" : "@file";
+      const title = isImage
+        ? "图片将通过 Codex CLI --image 发送；成功处理后只保留历史记录。"
+        : "文件将通过 Codex 风格 @file 路径发送；成功处理后只保留历史记录。";
+      return `
+      <div class="attachment-chip ${isImage ? "image" : "file"}" data-attachment-id="${escapeHtml(item.id)}" title="${escapeHtml(title)}">
         <span class="attachment-glyph" aria-hidden="true"></span>
         <span class="attachment-main">
           <strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong>
-          <small>${item.mime.startsWith("image/") ? "image input" : "@file"} · ${escapeHtml(item.mime || "文件")} · ${formatBytes(item.size)}</small>
+          <small>${transport} · 临时 · ${formatBytes(item.size)}</small>
         </span>
         <button class="remove-attachment-btn" type="button" aria-label="移除 ${escapeHtml(item.name)}" title="移除"></button>
       </div>
-    `)
+    `;
+    })
     .join("");
   updateButtons();
 }
@@ -2253,19 +2469,61 @@ function updateButtons() {
   $("sendBtn").setAttribute("title", stopMode ? "停止当前任务" : "发送");
   $("initializeBtn").disabled = state.busy || !state.activePaper;
   updateContextHint();
+  renderSendPreview();
+  renderSlashMenuFromInput();
   showActiveWorkStatus();
 }
 
 function updateContextHint() {
   const paper = state.activePaper ? `论文：${state.activePaper.title}` : "论文：未选择";
   const conv = state.activeConversation ? `对话：${state.activeConversation.title}` : "对话：自动创建";
-  $("contextHint").textContent = `当前上下文：${paper} · ${conv}`;
+  const session = state.activeConversation?.codex_session_id ? "session resume" : "session new";
+  $("contextHint").textContent = `当前上下文：${paper} · ${conv} · ${session}`;
 }
 
 function showActiveWorkStatus() {
   const task = state.activeConversation ? activeTaskForConversation(state.activeConversation.id) : null;
-  $("workStatusText").textContent = task ? `${taskStatusText(task.status)}：${task.label}` : "Codex 正在处理...";
+  $("workStatusText").textContent = task
+    ? `${taskStatusText(task.status)} ${formatTaskElapsed(task)} · ${task.label}`
+    : "Codex 正在处理...";
   $("workStatus").classList.toggle("hidden", !task);
+}
+
+function renderSendPreview() {
+  const box = $("sendPreview");
+  if (!box) return;
+  if (!composerHasPayload()) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+  const imageCount = state.pendingAttachments.filter(isImageAttachmentItem).length;
+  const fileCount = state.pendingAttachments.length - imageCount;
+  const parts = [
+    state.activeConversation ? state.activeConversation.title : "自动创建对话",
+    state.activeConversation?.codex_session_id ? "resume" : "new session",
+  ];
+  if (state.activePaper) parts.push(state.activePaper.title);
+  if (state.selectedSnippets.length) parts.push(`选区 ${state.selectedSnippets.length}`);
+  if (imageCount) parts.push(`--image ${imageCount}`);
+  if (fileCount) parts.push(`@file ${fileCount}`);
+  box.innerHTML = `
+    <span class="send-preview-label">将发送</span>
+    ${parts.map((part) => `<span class="send-preview-pill">${escapeHtml(part)}</span>`).join("")}
+  `;
+  box.classList.remove("hidden");
+}
+
+function formatTaskElapsed(task) {
+  const start = Date.parse(task.created_at || task.updated_at || "");
+  if (!Number.isFinite(start)) return "";
+  const seconds = Math.max(0, Math.floor((Date.now() - start) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  if (minutes < 60) return `${minutes}m ${rest}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
 }
 
 function fileToBase64(file) {
@@ -2482,8 +2740,15 @@ function bindEvents() {
       removeAttachment(item.dataset.attachmentId);
     }
   });
+  $("slashMenu").addEventListener("click", (event) => {
+    const item = event.target.closest(".slash-item");
+    if (item?.dataset.promptId) {
+      usePromptTemplate(item.dataset.promptId);
+    }
+  });
   $("messageInput").addEventListener("input", () => {
     saveActiveConversationDraft();
+    state.slashMenuIndex = 0;
     updateButtons();
   });
   $("messageInput").addEventListener("paste", (event) => {
@@ -2503,9 +2768,24 @@ function bindEvents() {
     if (event.isComposing || state.composingMessage || event.keyCode === 229) {
       return;
     }
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (isSlashMenuOpen() && ["ArrowDown", "ArrowUp"].includes(event.key)) {
       event.preventDefault();
-      sendMessage();
+      moveSlashMenuSelection(event.key === "ArrowDown" ? 1 : -1);
+      return;
+    }
+    if (isSlashMenuOpen() && event.key === "Enter") {
+      event.preventDefault();
+      selectSlashPromptByIndex();
+      return;
+    }
+    if (event.key === "Escape") {
+      if (isSlashMenuOpen()) closeSlashMenu();
+      clearSelection();
+      return;
+    }
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      handleComposerAction();
     }
   });
   $("composer").addEventListener("dragover", (event) => {
