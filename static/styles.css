@@ -315,7 +315,7 @@ body.chat-collapsed .chat-edge-toggle {
 .workspace-actions {
   padding: 14px 14px 13px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 8px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.16);
   background: rgba(255, 255, 255, 0.018);
@@ -436,6 +436,13 @@ body.chat-collapsed .chat-edge-toggle {
   transition: opacity 160ms ease, transform 160ms ease;
 }
 
+.folder-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 6px;
+}
+
 .conversation-folder.dragging,
 .conversation-item.dragging {
   opacity: 0.5;
@@ -483,6 +490,48 @@ body.sidebar-sorting * {
 
 .conversation-folder.running .folder-toggle {
   color: #d7e8ff;
+}
+
+.folder-new-conversation-btn,
+.sidebar button.folder-new-conversation-btn {
+  position: relative;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--sidebar-text);
+  padding: 0;
+  box-shadow: none;
+  font-size: 0;
+}
+
+.folder-new-conversation-btn::before,
+.folder-new-conversation-btn::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 13px;
+  height: 1.7px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+}
+
+.folder-new-conversation-btn::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.folder-new-conversation-btn:hover:not(:disabled),
+.sidebar button.folder-new-conversation-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(148, 163, 184, 0.28);
+  color: #ffffff;
+  transform: none;
+  box-shadow: none;
 }
 
 .folder-chevron {

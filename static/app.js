@@ -845,7 +845,7 @@ function renderConversations() {
   if (!state.conversations.length) {
     list.innerHTML = `
       <div class="list-empty">
-        还没有对话。直接在右侧发送问题，或点“新建”开始。
+        还没有对话。直接在右侧发送问题会自动创建。
       </div>
     `;
     return;
@@ -861,15 +861,22 @@ function renderConversations() {
     section.tabIndex = 0;
     section.title = "按 Alt + ↑/↓ 调整文件夹顺序，也可以拖动抓手";
     section.innerHTML = `
-      <button class="folder-toggle" type="button" aria-expanded="${String(!isCollapsed)}">
-        <span class="sidebar-drag-grip folder-grip" aria-hidden="true" title="拖动调整文件夹顺序"></span>
-        <span class="folder-chevron${isCollapsed ? " collapsed" : ""}" aria-hidden="true"></span>
-        <span class="folder-title">${escapeHtml(group.title)}</span>
-        <span class="folder-count">${group.conversations.length}</span>
-      </button>
+      <div class="folder-head">
+        <button class="folder-toggle" type="button" aria-expanded="${String(!isCollapsed)}">
+          <span class="sidebar-drag-grip folder-grip" aria-hidden="true" title="拖动调整文件夹顺序"></span>
+          <span class="folder-chevron${isCollapsed ? " collapsed" : ""}" aria-hidden="true"></span>
+          <span class="folder-title">${escapeHtml(group.title)}</span>
+          <span class="folder-count">${group.conversations.length}</span>
+        </button>
+        <button class="folder-new-conversation-btn" type="button" aria-label="在 ${escapeHtml(group.title)} 中新建对话" title="新建对话">+</button>
+      </div>
       <div class="folder-children${isCollapsed ? " hidden" : ""}"></div>
     `;
     section.querySelector(".folder-toggle").addEventListener("click", () => toggleConversationGroup(group.key));
+    section.querySelector(".folder-new-conversation-btn").addEventListener("click", (event) => {
+      event.stopPropagation();
+      newConversationForGroup(group);
+    });
     wireSidebarDragHandle(section.querySelector(".folder-grip"), section, "folder");
     section.addEventListener("keydown", handleFolderKeyboardReorder);
     const children = section.querySelector(".folder-children");
@@ -888,6 +895,7 @@ function conversationGroups() {
     if (!byKey.has(key)) {
       const group = {
         key,
+        paperId: conv.paper_id || null,
         title: conv.paper_title || (conv.paper_id ? "已删除论文" : "空对话"),
         conversations: [],
         fallbackOrder: index,
@@ -1242,9 +1250,9 @@ async function deleteConversation(conversationId) {
   }
 }
 
-async function newConversation() {
+async function newConversation(paperId = state.activePaper ? state.activePaper.id : null) {
   const payload = {
-    paper_id: state.activePaper ? state.activePaper.id : null,
+    paper_id: paperId,
   };
   const conv = await api("/api/conversations", {
     method: "POST",
@@ -1252,6 +1260,12 @@ async function newConversation() {
   });
   await loadConversations();
   await selectConversation(conv.id);
+}
+
+async function newConversationForGroup(group) {
+  state.collapsedConversationGroups[group.key] = false;
+  localStorage.setItem("paperCodexCollapsedConversationGroups", JSON.stringify(state.collapsedConversationGroups));
+  await newConversation(group.paperId || null);
 }
 
 async function ensureConversation() {
@@ -3146,7 +3160,6 @@ function bindEvents() {
     $("chosenFileName").textContent = state.selectedFile ? state.selectedFile.name : "也可以粘贴 PDF 链接或本地路径";
   });
   $("importPaperBtn").addEventListener("click", importPaper);
-  $("newConversationBtn").addEventListener("click", newConversation);
   $("initializeBtn").addEventListener("click", initializeConversation);
   $("sendBtn").addEventListener("click", handleComposerAction);
   $("cancelResendEditBtn").addEventListener("click", cancelResendEdit);
