@@ -1289,15 +1289,20 @@ class TaskManager:
         return public
 
 
+def codex_file_reference(path: str) -> str:
+    return f"@{path}\n本地路径：{path}"
+
+
 def init_pdf_path_prompt(title: str, pdf_path: str) -> str:
     return (
-        "你正在读全文模式下读取论文。请直接读取下面这个本地 PDF 文件，"
+        "你正在读全文模式下读取论文。请优先把下面的 @file 引用作为上下文读取，"
+        "如果 @file 无法解析，就使用后面的本地路径读取这个 PDF 文件，"
         "必要时可以使用 Python 或系统工具解析 PDF 内容。\n"
         "请阅读并记住它，后续用户会直接提问或选中文本提问。"
         "请不要生成独立的 Paper Brief，不要做代码索引。"
         "读完后只用中文简短回复：你已经读完这篇论文，可以开始提问；"
         "如果 PDF 无法读取或内容太长，请说明原因和你已尽力保留的主要上下文。"
-        f"\n\n论文标题：{title}\n\nPDF 本地路径：\n{pdf_path}"
+        f"\n\n论文标题：{title}\n\n{codex_file_reference(pdf_path)}"
     )
 
 
@@ -1316,15 +1321,16 @@ def attachments_prompt_block(attachments: List[Dict[str, Any]]) -> str:
     if not attachments:
         return ""
     lines = [
-        "用户随这条消息附加了以下本地文件。请把它们作为上下文读取；"
-        "图片请观察内容，PDF/文本/代码/数据文件请按路径读取。"
+        "用户随这条消息附加了以下本地文件。请优先把每个 @file 引用作为上下文读取；"
+        "如果 @file 无法解析，就使用对应的本地路径读取。"
+        "图片请观察内容，PDF/文本/代码/数据文件请按文件内容处理。"
     ]
     for index, item in enumerate(attachments, start=1):
         lines.append(
             f"\n[附件 {index}] {item['filename']}\n"
             f"类型：{item['mime']}\n"
             f"大小：{item['size']} bytes\n"
-            f"本地路径：{item['path']}"
+            f"{codex_file_reference(item['path'])}"
         )
     return "\n\n" + "\n".join(lines)
 
