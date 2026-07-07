@@ -640,6 +640,29 @@ class Store:
             )
         return saved
 
+    def delete_attachment_paths(self, paths: List[str]) -> None:
+        try:
+            attachments_root = self.attachments_dir.resolve()
+        except Exception:
+            return
+        for raw_path in paths:
+            try:
+                path = pathlib.Path(raw_path).expanduser().resolve()
+                if path.exists() and attachments_root in path.parents:
+                    path.unlink()
+            except Exception:
+                continue
+
+    def delete_conversation_attachments(self, conv_id: str) -> bool:
+        conv_dir = self.attachments_dir / slugify(conv_id)
+        try:
+            if conv_dir.exists():
+                shutil.rmtree(conv_dir)
+                return True
+        except Exception:
+            return False
+        return False
+
     def _insert_paper(self, paper_id: str, title: str, path: pathlib.Path, source: str) -> Dict[str, Any]:
         created = now_iso()
         with self.connect() as con:
@@ -755,7 +778,8 @@ class Store:
                 raise ValueError("Conversation not found.")
             con.execute("delete from messages where conversation_id = ?", (conv_id,))
             con.execute("delete from conversations where id = ?", (conv_id,))
-        return {"id": conv_id, "title": conversation["title"], "deleted": True}
+        attachments_deleted = self.delete_conversation_attachments(conv_id)
+        return {"id": conv_id, "title": conversation["title"], "deleted": True, "attachments_deleted": attachments_deleted}
 
     def update_conversation_session(self, conv_id: str, session_id: Optional[str], initialized: bool = False) -> None:
         stamp = now_iso()
@@ -1132,6 +1156,7 @@ class TaskManager:
         label: str,
         user_message_id: Optional[str] = None,
         editable_content: Optional[str] = None,
+        attachment_paths: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         return self._enqueue(
             conversation_id,
@@ -1141,6 +1166,7 @@ class TaskManager:
                 "prompt": prompt,
                 "editable_content": editable_content or prompt,
                 "user_message_id": user_message_id,
+                "attachment_paths": attachment_paths or [],
             },
         )
 
@@ -1244,8 +1270,11 @@ class TaskManager:
         task["status"] = status
         task["updated_at"] = now_iso()
         task["error"] = error
+        attachment_paths = list(task.get("attachment_paths") or [])
         self.cancel_events.pop(task_id, None)
         self.condition.notify_all()
+        if status == "done" and attachment_paths:
+            self.store.delete_attachment_paths(attachment_paths)
 
     def _is_next_for_conversation_locked(self, task_id: str) -> bool:
         task = self.tasks[task_id]
@@ -1286,6 +1315,7 @@ class TaskManager:
         public.pop("prompt", None)
         public.pop("user_message_id", None)
         public.pop("paper_id", None)
+        public.pop("attachment_paths", None)
         return public
 
 
@@ -1586,7 +1616,8 @@ class AppHandler(SimpleHTTPRequestHandler):
             raise ValueError("Message is empty.")
         user_msg = self.store.add_message(conv_id, "user", visible)
         label = (visible.splitlines()[0] or "向 Codex 提问").strip()
-        task = self.tasks.enqueue_message(conv_id, prompt, label[:80], user_msg["id"], visible)
+        attachment_paths = [item["path"] for item in attachments]
+        task = self.tasks.enqueue_message(conv_id, prompt, label[:80], user_msg["id"], visible, attachment_paths)
         json_response(self, {"user": user_msg, "task": task})
 
 
