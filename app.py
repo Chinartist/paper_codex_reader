@@ -5,7 +5,7 @@ Run with:
     python app.py
 
 The server intentionally uses Python's standard library for the web layer so
-the packaged app only needs one runtime dependency: pypdf for text extraction.
+the packaged app stays lightweight and easy to run.
 """
 
 from __future__ import annotations
@@ -790,41 +790,6 @@ class Store:
                 continue
 
 
-def extract_pdf_text(pdf_path: str) -> str:
-    try:
-        from pypdf import PdfReader
-    except Exception as exc:
-        raise RuntimeError("Missing dependency pypdf. Run ./run.sh or pip install -r requirements.txt.") from exc
-
-    reader = PdfReader(pdf_path)
-    parts: List[str] = []
-    for idx, page in enumerate(reader.pages, start=1):
-        try:
-            text = page.extract_text() or ""
-        except Exception as exc:
-            text = f"[Page {idx} text extraction failed: {exc}]"
-        text = re.sub(r"\n{3,}", "\n\n", text).strip()
-        if text:
-            parts.append(f"\n\n--- Page {idx} ---\n{text}")
-    return "\n".join(parts).strip()
-
-
-def chunk_text(text: str, chunk_chars: int) -> List[str]:
-    if len(text) <= chunk_chars:
-        return [text]
-    chunks: List[str] = []
-    start = 0
-    while start < len(text):
-        end = min(start + chunk_chars, len(text))
-        if end < len(text):
-            boundary = text.rfind("\n--- Page ", start, end)
-            if boundary > start + chunk_chars // 2:
-                end = boundary
-        chunks.append(text[start:end].strip())
-        start = end
-    return [chunk for chunk in chunks if chunk]
-
-
 class CodexRunner:
     def __init__(self, store: Store):
         self.store = store
@@ -1030,29 +995,11 @@ class CodexRunner:
     def initialize_with_paper(
         self, conv: Dict[str, Any], paper: Dict[str, Any], cancel_event: Optional[threading.Event] = None
     ) -> Tuple[str, Optional[str]]:
-        settings = self.store.settings()
-        chunk_chars = max(4000, int(settings.get("paper_chunk_chars", "18000") or "18000"))
-        text = extract_pdf_text(paper["path"])
-        if not text:
-            raise RuntimeError("No extractable text was found in this PDF.")
-        chunks = chunk_text(text, chunk_chars)
-        total = len(chunks)
-        session_id = conv.get("codex_session_id")
-        last_answer = ""
-        for idx, chunk in enumerate(chunks, start=1):
-            if total == 1:
-                prompt = init_prompt(paper["title"], chunk, idx, total, final=True)
-            elif idx < total:
-                prompt = init_prompt(paper["title"], chunk, idx, total, final=False)
-            else:
-                prompt = init_prompt(paper["title"], chunk, idx, total, final=True)
-            current = dict(conv)
-            current["codex_session_id"] = session_id
-            if cancel_event and cancel_event.is_set():
-                raise RuntimeError("Canceled.")
-            last_answer, new_session = self.send(current, prompt, cancel_event)
-            session_id = new_session or session_id
-        return last_answer, session_id
+        pdf_path = pathlib.Path(paper["path"]).expanduser().resolve()
+        if not pdf_path.exists():
+            raise RuntimeError("PDF file not found.")
+        prompt = init_pdf_path_prompt(paper["title"], str(pdf_path))
+        return self.send(conv, prompt, cancel_event)
 
 
 class TaskManager:
@@ -1307,21 +1254,16 @@ class TaskManager:
         return public
 
 
-def init_prompt(title: str, content: str, index: int, total: int, final: bool) -> str:
-    if final:
-        instruction = (
-            "你正在读全文模式下读取论文。下面是论文内容"
-            f"（第 {index}/{total} 块）。请阅读并记住它，后续用户会直接提问或选中文本提问。\n"
-            "请不要生成独立的 Paper Brief，不要做代码索引。读完后只用中文简短回复："
-            "你已经读完这篇论文，可以开始提问；如果内容太长，请说明你已尽力保留主要上下文。"
-        )
-    else:
-        instruction = (
-            "你正在读全文模式下读取论文。下面是论文内容"
-            f"（第 {index}/{total} 块）。请阅读并保留上下文，等待后续块。"
-            "请只用一句中文确认已读取本块，不要总结。"
-        )
-    return f"{instruction}\n\n论文标题：{title}\n\n论文内容：\n{content}"
+def init_pdf_path_prompt(title: str, pdf_path: str) -> str:
+    return (
+        "你正在读全文模式下读取论文。请直接读取下面这个本地 PDF 文件，"
+        "必要时可以使用 Python 或系统工具解析 PDF 内容。\n"
+        "请阅读并记住它，后续用户会直接提问或选中文本提问。"
+        "请不要生成独立的 Paper Brief，不要做代码索引。"
+        "读完后只用中文简短回复：你已经读完这篇论文，可以开始提问；"
+        "如果 PDF 无法读取或内容太长，请说明原因和你已尽力保留的主要上下文。"
+        f"\n\n论文标题：{title}\n\nPDF 本地路径：\n{pdf_path}"
+    )
 
 
 def selected_text_prompt(title: str, selected_text: str, user_note: str = "") -> str:

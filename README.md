@@ -53,7 +53,7 @@ The app opens:
 http://127.0.0.1:8765
 ```
 
-The first run creates a virtual environment and installs `pypdf`.
+The first run creates a virtual environment and installs any listed Python dependencies.
 
 ## Data Directory
 

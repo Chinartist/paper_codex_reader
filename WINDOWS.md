@@ -10,8 +10,9 @@ cd paper_codex_reader
 .\setup-windows.ps1
 ```
 
-The setup script creates the Python virtual environment, installs `pypdf`,
-checks whether a runnable Codex CLI is available, and starts the app.
+The setup script creates the Python virtual environment, installs listed
+Python dependencies, checks whether a runnable Codex CLI is available, and
+starts the app.
 
 The normal scripts still work:
 
