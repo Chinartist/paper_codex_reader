@@ -1638,11 +1638,13 @@ async function sendMessage() {
     state.editingResendMessageId = null;
     updateComposerMode();
     toast("问题已加入队列");
+    $("messageInput").focus();
   } catch (error) {
     if (state.activeConversation?.id === convId) {
       appendMessage("assistant", `出错了：${error.message}`);
     }
     toast(error.message, 9000);
+    $("messageInput").focus();
   }
 }
 
@@ -2108,11 +2110,6 @@ function handleGlobalShortcuts(event) {
       event.preventDefault();
       cancelTask(task.id);
     }
-    return;
-  }
-  if (withCommand && key === "enter") {
-    event.preventDefault();
-    handleComposerAction();
     return;
   }
   if (isEditing) return;
@@ -3297,9 +3294,9 @@ function bindEvents() {
       clearSelection();
       return;
     }
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+    if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
       event.preventDefault();
-      handleComposerAction();
+      sendMessage();
     }
   });
   $("composer").addEventListener("dragover", (event) => {

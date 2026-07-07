@@ -164,8 +164,8 @@ file:///C:/Users/me/Documents/paper.pdf
 
 | 快捷键 | 功能 |
 | --- | --- |
-| 聊天框内 `Enter` | 换行 |
-| 聊天框内 `Cmd/Ctrl + Enter` | 发送当前消息 |
+| 聊天框内 `Enter` | 发送当前消息 |
+| 聊天框内 `Shift + Enter` | 换行 |
 | 聊天框开头输入 `/` | 打开 prompt 命令菜单 |
 | prompt 命令菜单内 `ArrowUp/Down` | 切换 prompt |
 | prompt 命令菜单内 `Enter` | 插入选中的 prompt |

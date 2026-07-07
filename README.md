@@ -164,8 +164,8 @@ Most reader shortcuts are ignored while typing in an input, textarea, select, or
 
 | Shortcut | Action |
 | --- | --- |
-| `Enter` in the chat box | Insert a new line |
-| `Cmd/Ctrl + Enter` in the chat box | Send the current message |
+| `Enter` in the chat box | Send the current message |
+| `Shift + Enter` in the chat box | Insert a new line |
 | `/` at the start of the chat box | Open the prompt command menu |
 | `ArrowUp/Down` in the prompt command menu | Move between prompts |
 | `Enter` in the prompt command menu | Insert the selected prompt |
