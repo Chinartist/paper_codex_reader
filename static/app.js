@@ -2873,7 +2873,14 @@ function updateContextHint() {
   const paper = state.activePaper ? `论文：${state.activePaper.title}` : "论文：未选择";
   const conv = state.activeConversation ? `对话：${state.activeConversation.title}` : "对话：自动创建";
   const session = state.activeConversation?.codex_session_id ? "session resume" : "session new";
+  updateChatTitle();
   $("contextHint").textContent = `当前上下文：${paper} · ${conv} · ${session}`;
+}
+
+function updateChatTitle() {
+  const title = state.activeConversation?.title || "新对话";
+  $("chatTitle").textContent = title;
+  $("chatTitle").title = title;
 }
 
 function showActiveWorkStatus() {

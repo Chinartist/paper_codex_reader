@@ -1298,6 +1298,12 @@ body.resizing-chat {
   gap: 10px;
 }
 
+.chat-head h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .context-hint {
   max-width: 100%;
   overflow: hidden;
