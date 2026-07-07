@@ -870,7 +870,7 @@ class Store:
 
     def next_conversation_title(self, paper_id: Optional[str]) -> str:
         paper = self.get_paper(paper_id) if paper_id else None
-        base_title = f"阅读 {paper['title']}" if paper else "空对话"
+        base_title = paper["title"] if paper else "空对话"
         with self.connect() as con:
             if paper_id:
                 row = con.execute("select count(*) as count from conversations where paper_id = ?", (paper_id,)).fetchone()
