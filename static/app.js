@@ -56,6 +56,7 @@ const state = {
   editingResendMessageId: null,
   composingMessage: false,
   slashMenuIndex: 0,
+  slashMenuSignature: "",
   selectionPositionFrame: 0,
   draggingTaskId: null,
   draggingFolderKey: null,
@@ -2194,14 +2195,19 @@ function renderSlashMenuFromInput() {
     return;
   }
   state.slashMenuIndex = Math.min(state.slashMenuIndex, matches.length - 1);
-  menu.innerHTML = matches
-    .map((item, index) => `
-      <button class="slash-item ${index === state.slashMenuIndex ? "active" : ""}" type="button" role="option" aria-selected="${index === state.slashMenuIndex ? "true" : "false"}" data-prompt-id="${escapeHtml(item.id)}">
-        <strong>${escapeHtml(item.title)}</strong>
-        <span>${escapeHtml(compactText(item.prompt, 86))}</span>
-      </button>
-    `)
-    .join("");
+  const signature = JSON.stringify(matches.map((item) => [item.id, item.title, item.prompt]));
+  if (state.slashMenuSignature !== signature) {
+    menu.innerHTML = matches
+      .map((item, index) => `
+        <button class="slash-item" type="button" role="option" aria-selected="false" data-slash-index="${index}" data-prompt-id="${escapeHtml(item.id)}">
+          <strong>${escapeHtml(item.title)}</strong>
+          <span>${escapeHtml(compactText(item.prompt, 86))}</span>
+        </button>
+      `)
+      .join("");
+    state.slashMenuSignature = signature;
+  }
+  updateSlashMenuActive();
   menu.classList.remove("hidden");
 }
 
@@ -2211,6 +2217,7 @@ function closeSlashMenu() {
   menu.classList.add("hidden");
   menu.innerHTML = "";
   state.slashMenuIndex = 0;
+  state.slashMenuSignature = "";
 }
 
 function isSlashMenuOpen() {
@@ -2231,7 +2238,16 @@ function moveSlashMenuSelection(delta) {
   const items = [...$("slashMenu").querySelectorAll(".slash-item")];
   if (!items.length) return;
   state.slashMenuIndex = (state.slashMenuIndex + delta + items.length) % items.length;
-  renderSlashMenuFromInput();
+  updateSlashMenuActive();
+}
+
+function updateSlashMenuActive() {
+  const items = [...$("slashMenu").querySelectorAll(".slash-item")];
+  for (const [index, item] of items.entries()) {
+    const active = index === state.slashMenuIndex;
+    item.classList.toggle("active", active);
+    item.setAttribute("aria-selected", active ? "true" : "false");
+  }
 }
 
 function openPromptForm(promptId = null) {
@@ -2271,6 +2287,7 @@ function savePromptTemplate(event) {
   }
   savePromptTemplates();
   renderPromptTemplates();
+  refreshOpenSlashMenu();
   closePromptForm();
 }
 
@@ -2284,6 +2301,13 @@ function deletePromptTemplate(promptId) {
   }
   savePromptTemplates();
   renderPromptTemplates();
+  refreshOpenSlashMenu();
+}
+
+function refreshOpenSlashMenu() {
+  if (!isSlashMenuOpen()) return;
+  state.slashMenuSignature = "";
+  renderSlashMenuFromInput();
 }
 
 function clearSelection() {
@@ -2470,7 +2494,6 @@ function updateButtons() {
   $("initializeBtn").disabled = state.busy || !state.activePaper;
   updateContextHint();
   renderSendPreview();
-  renderSlashMenuFromInput();
   showActiveWorkStatus();
 }
 
@@ -2746,10 +2769,17 @@ function bindEvents() {
       usePromptTemplate(item.dataset.promptId);
     }
   });
+  $("slashMenu").addEventListener("pointerover", (event) => {
+    const item = event.target.closest(".slash-item");
+    if (!item || item.dataset.slashIndex === undefined) return;
+    state.slashMenuIndex = Number(item.dataset.slashIndex) || 0;
+    updateSlashMenuActive();
+  });
   $("messageInput").addEventListener("input", () => {
     saveActiveConversationDraft();
     state.slashMenuIndex = 0;
     updateButtons();
+    renderSlashMenuFromInput();
   });
   $("messageInput").addEventListener("paste", (event) => {
     const files = [...(event.clipboardData?.files || [])];
