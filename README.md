@@ -112,6 +112,7 @@ file:///C:/Users/me/Documents/paper.pdf
 
 - Render PDFs in the browser with selectable text.
 - Select one or more text passages and add them to the current conversation with the floating check button.
+- Send the current selected passage immediately from the floating selection toolbar.
 - Zoom in, zoom out, fit to width, or return to 100%.
 - Preserve the reading position when zooming or resizing panels.
 - Lazy-render visible pages so large PDFs stay responsive.

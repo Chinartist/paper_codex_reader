@@ -1614,16 +1614,17 @@ body.resizing-chat {
 .selection-box {
   position: fixed;
   z-index: 90;
-  width: 34px;
-  height: 34px;
+  min-width: 76px;
+  height: 36px;
   margin: 0;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: linear-gradient(180deg, rgba(30, 41, 59, 0.98) 0%, rgba(15, 23, 42, 0.98) 100%);
   border-radius: 999px;
-  padding: 0;
+  padding: 1px;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 1px;
   transform: translateX(-50%);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.26), 0 2px 7px rgba(15, 23, 42, 0.18);
   backdrop-filter: blur(10px);
@@ -1651,7 +1652,7 @@ body.resizing-chat {
   border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.selection-add-btn {
+.selection-action-btn {
   position: relative;
   width: 34px;
   height: 34px;
@@ -1676,12 +1677,40 @@ body.resizing-chat {
   transform: translateY(-1px) rotate(-45deg);
 }
 
-.selection-add-btn:hover {
+.selection-send-btn {
+  box-shadow: inset 1px 0 rgba(255, 255, 255, 0.13);
+}
+
+.selection-send-btn::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 9px;
+  width: 2px;
+  height: 17px;
+  border-radius: 999px;
+  background: white;
+  transform: translateX(-50%);
+}
+
+.selection-send-btn::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  width: 10px;
+  height: 10px;
+  border-left: 2px solid white;
+  border-top: 2px solid white;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.selection-action-btn:hover {
   background: rgba(255, 255, 255, 0.09);
   transform: scale(1.04);
 }
 
-.selection-add-btn:active {
+.selection-action-btn:active {
   transform: scale(0.96);
 }
 

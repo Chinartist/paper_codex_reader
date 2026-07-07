@@ -2034,7 +2034,8 @@ function positionSelectionBox(selection) {
   );
   if (!rect) return false;
   const box = $("selectionBox");
-  const left = Math.min(Math.max(rect.left + rect.width / 2, visibleLeft + 18), visibleRight - 18);
+  const toolbarHalfWidth = 42;
+  const left = Math.min(Math.max(rect.left + rect.width / 2, visibleLeft + toolbarHalfWidth), visibleRight - toolbarHalfWidth);
   const topAbove = rect.top - 42;
   const placedBelow = topAbove < visibleTop + 8;
   const rawTop = placedBelow ? rect.bottom + 8 : topAbove;
@@ -2080,6 +2081,42 @@ function addSelectionToConversation() {
   clearSelection();
   $("messageInput").focus();
   toast(`已添加 ${state.selectedSnippets.length} 处选区`);
+}
+
+async function sendSelectionImmediately() {
+  if (!state.selectedText) return;
+  const snippet = {
+    id: makeId(),
+    text: state.selectedText,
+    page: state.selectedPage,
+  };
+  const selectedText = buildSelectedText([snippet]);
+  const localVisible = formatLocalVisibleMessage("", [snippet], []);
+  try {
+    await ensureConversation();
+    const convId = state.activeConversation.id;
+    appendMessage("user", localVisible);
+    clearSelection();
+    scrollMessages();
+    await api(`/api/conversations/${convId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({
+        content: "",
+        selected_text: selectedText,
+        attachments: [],
+        paper_id: state.activePaper ? state.activePaper.id : null,
+      }),
+    });
+    await loadConversations();
+    await loadTasks({ silent: true });
+    updateContextHint();
+    toast("选区已加入队列");
+  } catch (error) {
+    if (state.activeConversation) {
+      appendMessage("assistant", `出错了：${error.message}`);
+    }
+    toast(error.message, 9000);
+  }
 }
 
 function renderSelectedContexts() {
@@ -2838,6 +2875,7 @@ function bindEvents() {
   $("pdfViewer").addEventListener("scroll", scheduleSelectionBoxSync, { passive: true });
   window.addEventListener("resize", scheduleSelectionBoxSync);
   $("addSelectionBtn").addEventListener("click", addSelectionToConversation);
+  $("sendSelectionBtn").addEventListener("click", sendSelectionImmediately);
   $("clearContextBtn").addEventListener("click", clearConversationSelections);
   $("contextList").addEventListener("click", (event) => {
     const button = event.target.closest(".remove-context-btn");
