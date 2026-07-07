@@ -50,6 +50,7 @@ const state = {
   editingPromptId: null,
   editingTaskId: null,
   editingResendMessageId: null,
+  composingMessage: false,
   selectionPositionFrame: 0,
   draggingTaskId: null,
   draggingFolderKey: null,
@@ -2291,7 +2292,17 @@ function bindEvents() {
   $("sendBtn").addEventListener("click", sendMessage);
   $("cancelResendEditBtn").addEventListener("click", cancelResendEdit);
   $("messageInput").addEventListener("input", saveActiveConversationDraft);
+  $("messageInput").addEventListener("compositionstart", () => {
+    state.composingMessage = true;
+  });
+  $("messageInput").addEventListener("compositionend", () => {
+    state.composingMessage = false;
+    saveActiveConversationDraft();
+  });
   $("messageInput").addEventListener("keydown", (event) => {
+    if (event.isComposing || state.composingMessage || event.keyCode === 229) {
+      return;
+    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       sendMessage();
