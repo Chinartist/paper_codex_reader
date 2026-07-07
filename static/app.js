@@ -12,6 +12,8 @@ const DEFAULT_PROMPT_TEMPLATES = [
 ];
 
 const CONVERSATION_DRAFTS_KEY = "paperCodexConversationDrafts";
+const RECENT_PAPERS_KEY = "paperCodexRecentPapers";
+const RECENT_PAPER_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MAX_MESSAGE_ATTACHMENTS = 8;
 const MAX_MESSAGE_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 
@@ -50,6 +52,7 @@ const state = {
   chatCollapsed: localStorage.getItem("paperCodexChatCollapsed") === "true",
   promptTemplates: loadPromptTemplates(),
   conversationDrafts: loadConversationDrafts(),
+  recentPapers: loadRecentPapers(),
   conversationAttachmentDrafts: {},
   editingPromptId: null,
   editingTaskId: null,
@@ -468,6 +471,7 @@ async function logoutCodex() {
 async function loadPapers() {
   state.papers = await api("/api/papers");
   renderPapers();
+  renderRecentPapers();
   if (!state.activePaper && state.papers.length) {
     await selectPaper(state.papers[0].id);
   }
@@ -520,6 +524,71 @@ function renderPapers() {
     list.innerHTML = `<div class="list-empty">没有匹配的论文。</div>`;
   }
   renderPaperDetail();
+  renderRecentPapers();
+}
+
+function loadRecentPapers() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RECENT_PAPERS_KEY) || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => ({ id: String(item.id || ""), openedAt: Number(item.openedAt) || 0 }))
+      .filter((item) => item.id && item.openedAt);
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentPapers() {
+  localStorage.setItem(RECENT_PAPERS_KEY, JSON.stringify(state.recentPapers.slice(0, 30)));
+}
+
+function recordRecentPaper(paperId) {
+  if (!paperId) return;
+  const now = Date.now();
+  state.recentPapers = [
+    { id: paperId, openedAt: now },
+    ...state.recentPapers.filter((item) => item.id !== paperId && now - item.openedAt <= RECENT_PAPER_WINDOW_MS),
+  ].slice(0, 30);
+  saveRecentPapers();
+  renderRecentPapers();
+}
+
+function getRecentOpenedPapers() {
+  const now = Date.now();
+  const known = new Map(state.papers.map((paper) => [paper.id, paper]));
+  return state.recentPapers
+    .filter((item) => now - item.openedAt <= RECENT_PAPER_WINDOW_MS && known.has(item.id))
+    .sort((a, b) => b.openedAt - a.openedAt)
+    .map((item) => ({ paper: known.get(item.id), openedAt: item.openedAt }));
+}
+
+function renderRecentPapers() {
+  const menu = $("recentPaperMenu");
+  const trigger = $("recentPaperTrigger");
+  if (!menu || !trigger) return;
+  const recent = getRecentOpenedPapers();
+  trigger.disabled = !recent.length;
+  trigger.setAttribute("aria-expanded", "false");
+  if (!recent.length) {
+    menu.innerHTML = `<div class="recent-paper-empty">最近一天还没有打开过论文</div>`;
+    return;
+  }
+  menu.innerHTML = `
+    <div class="recent-paper-menu-title">最近一天</div>
+    ${recent.map(({ paper, openedAt }) => `
+      <button
+        type="button"
+        class="recent-paper-item ${state.activePaper?.id === paper.id ? "active" : ""}"
+        data-paper-id="${escapeHtml(paper.id)}"
+        title="${escapeHtml(paper.title)}"
+        role="menuitem"
+      >
+        <span>${escapeHtml(paper.title)}</span>
+        <small>${escapeHtml(formatRecentOpenedTime(openedAt))}</small>
+      </button>
+    `).join("")}
+  `;
 }
 
 function filteredPapers() {
@@ -623,6 +692,7 @@ async function savePaperTitle() {
       $("activePaperTitle").textContent = state.activePaper.title;
     }
     renderPapers();
+    renderRecentPapers();
     renderConversations();
     updateContextHint();
     $("renamePaperDialog").close();
@@ -660,6 +730,7 @@ async function deletePaper(paperId) {
     }
     await loadConversations();
     renderPapers();
+    renderRecentPapers();
     renderConversations();
     updateContextHint();
     updateButtons();
@@ -716,6 +787,9 @@ async function selectPaper(paperId) {
   clearConversationSelections();
   state.activePaper = state.papers.find((paper) => paper.id === paperId) || null;
   state.selectedLibraryPaperId = state.activePaper?.id || state.selectedLibraryPaperId;
+  if (state.activePaper) {
+    recordRecentPaper(state.activePaper.id);
+  }
   renderPapers();
   renderConversations();
   $("activePaperTitle").textContent = state.activePaper ? state.activePaper.title : "未选择论文";
@@ -2616,6 +2690,16 @@ function shortSource(source) {
   return parts.slice(-3).join("/");
 }
 
+function formatRecentOpenedTime(value) {
+  const diff = Math.max(0, Date.now() - Number(value || 0));
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "刚刚";
+  if (minutes < 60) return `${minutes} 分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  return formatDate(value);
+}
+
 function formatDate(value) {
   if (!value) return "";
   const date = new Date(value);
@@ -2772,6 +2856,17 @@ function bindEvents() {
   $("paperSortInput").addEventListener("change", (event) => {
     state.librarySort = event.target.value;
     renderPapers();
+  });
+  $("recentPaperSwitcher").addEventListener("mouseenter", () => {
+    $("recentPaperTrigger").setAttribute("aria-expanded", "true");
+  });
+  $("recentPaperSwitcher").addEventListener("mouseleave", () => {
+    $("recentPaperTrigger").setAttribute("aria-expanded", "false");
+  });
+  $("recentPaperMenu").addEventListener("click", (event) => {
+    const item = event.target.closest(".recent-paper-item");
+    if (!item?.dataset.paperId) return;
+    selectPaper(item.dataset.paperId).catch((error) => toast(error.message, 7000));
   });
   $("zoomOutBtn").addEventListener("click", () => zoomBy(1 / 1.15));
   $("zoomInBtn").addEventListener("click", () => zoomBy(1.15));

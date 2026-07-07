@@ -65,10 +65,18 @@
           </div>
         </div>
       </header>
-      <div id="pdfViewer" class="pdf-viewer" aria-label="PDF 阅读器">
-        <div class="empty-state">
-          <h2>打开论文库选择 PDF</h2>
-          <p>也可以先在右侧新建空对话，直接向 Codex 提问。</p>
+      <div class="pdf-stage">
+        <div id="recentPaperSwitcher" class="recent-paper-switcher">
+          <button id="recentPaperTrigger" class="recent-paper-trigger" type="button" aria-haspopup="menu" aria-expanded="false">
+            最近
+          </button>
+          <div id="recentPaperMenu" class="recent-paper-menu" role="menu"></div>
+        </div>
+        <div id="pdfViewer" class="pdf-viewer" aria-label="PDF 阅读器">
+          <div class="empty-state">
+            <h2>打开论文库选择 PDF</h2>
+            <p>也可以先在右侧新建空对话，直接向 Codex 提问。</p>
+          </div>
         </div>
       </div>
     </main>
