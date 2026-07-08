@@ -89,6 +89,8 @@ You can import:
 - A direct PDF URL
 - A PDF file selected from the file picker
 
+For batch import, select multiple PDFs in the file picker or paste multiple PDF URLs/absolute paths with one item per line.
+
 Supported local path examples:
 
 ```text
@@ -102,7 +104,7 @@ file:///C:/Users/me/Documents/paper.pdf
 
 ### Paper Library
 
-- Import papers from local PDF paths, uploaded files, or direct PDF links.
+- Import papers from local PDF paths, uploaded files, or direct PDF links, including batch imports.
 - Search and sort papers in the paper library.
 - Rename a paper display title without changing the source PDF file.
 - Delete the app's local PDF copy from the paper library.

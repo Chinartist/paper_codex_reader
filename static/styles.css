@@ -3249,7 +3249,7 @@ body.resizing-chat {
 
 .import-box {
   display: grid;
-  grid-template-columns: minmax(220px, 1.1fr) minmax(220px, 1fr) minmax(180px, 0.8fr) auto;
+  grid-template-columns: minmax(220px, 1.1fr) minmax(240px, 1.1fr) minmax(180px, 0.8fr) auto;
   gap: 12px;
   align-items: end;
   border: 1px solid var(--border);
@@ -3287,8 +3287,14 @@ body.resizing-chat {
   min-width: 0;
 }
 
-.library-import .field-label input {
+.library-import .field-label input,
+.library-import .field-label textarea {
   min-width: 0;
+}
+
+.library-import .field-label textarea {
+  min-height: 74px;
+  resize: vertical;
 }
 
 .import-row span {
@@ -3298,6 +3304,18 @@ body.resizing-chat {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.import-progress {
+  grid-column: 1 / -1;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 10px;
+  background: #f8fafc;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 9px 10px;
+  white-space: pre-wrap;
 }
 
 .field-label,

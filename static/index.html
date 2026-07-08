@@ -235,16 +235,17 @@
                 <button id="chooseFileBtn" class="secondary-btn" type="button">选择 PDF</button>
                 <span id="chosenFileName">也可以粘贴 PDF 链接或本地路径</span>
               </div>
-              <input id="paperFileInput" type="file" accept="application/pdf,.pdf" hidden />
+              <input id="paperFileInput" type="file" accept="application/pdf,.pdf" multiple hidden />
               <label class="field-label" for="paperSourceInput">
                 PDF 来源
-                <input id="paperSourceInput" placeholder="PDF 链接或本地绝对路径" />
+                <textarea id="paperSourceInput" rows="3" placeholder="PDF 链接或本地绝对路径；批量导入时一行一个"></textarea>
               </label>
               <label class="field-label" for="paperTitleInput">
-                论文标题
-                <input id="paperTitleInput" placeholder="可选；留空使用文件名" />
+                标题
+                <input id="paperTitleInput" placeholder="可选；批量时作为标题前缀" />
               </label>
               <button id="importPaperBtn" type="button">导入论文</button>
+              <div id="importProgress" class="import-progress hidden" aria-live="polite"></div>
             </div>
           </section>
           <section class="library-list">

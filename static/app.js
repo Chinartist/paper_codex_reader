@@ -34,7 +34,7 @@ const state = {
   highlightHoverTimer: 0,
   highlightPaletteOpen: false,
   pendingAttachments: [],
-  selectedFile: null,
+  selectedFiles: [],
   settings: {},
   busy: false,
   pending: {},
@@ -867,45 +867,151 @@ async function deletePaper(paperId) {
 }
 
 async function importPaper() {
-  const source = $("paperSourceInput").value.trim();
+  const sources = parsePaperSources($("paperSourceInput").value);
   const title = $("paperTitleInput").value.trim();
-  if (!source && !state.selectedFile) {
-    toast("请选择 PDF，或输入 PDF 本地路径/链接");
+  const files = [...state.selectedFiles];
+  const items = [
+    ...files.map((file) => ({ type: "file", file, label: file.name })),
+    ...sources.map((source) => ({ type: "source", source, label: source })),
+  ];
+  if (!items.length) {
+    toast("请选择一个或多个 PDF，或输入 PDF 本地路径/链接");
     return;
   }
-  let payload = null;
-  setBusy(true, "正在导入论文...");
+  const batch = items.length > 1;
+  const imported = [];
+  const failed = [];
+  let finalToast = "";
+  let finalToastDelay = 4000;
+  setBusy(true, batch ? `正在批量导入 0/${items.length}...` : "正在导入论文...");
+  setImportProgress(batch ? `准备导入 ${items.length} 篇论文...` : "正在导入论文...");
   try {
-    if (state.selectedFile) {
-      const dataBase64 = await fileToBase64(state.selectedFile);
-      payload = {
-        filename: state.selectedFile.name,
-        data_base64: dataBase64,
-        title,
-      };
-    } else {
-      payload = source.startsWith("http://") || source.startsWith("https://")
-        ? { url: source, title }
-        : { path: source, title };
+    for (const [index, item] of items.entries()) {
+      setBusy(true, `正在导入 ${index + 1}/${items.length}...`);
+      setImportProgress(importProgressText(items, imported, failed, item, index));
+      try {
+        const paper = await importPaperItem(item, itemImportTitle(title, index, batch));
+        imported.push(paper);
+      } catch (error) {
+        failed.push({ item, label: item.label, message: error.message || "导入失败" });
+      }
     }
-    const paper = await api("/api/papers/import", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    $("paperSourceInput").value = "";
-    $("paperTitleInput").value = "";
-    state.selectedFile = null;
-    $("paperFileInput").value = "";
-    $("chosenFileName").textContent = "也可以粘贴 PDF 链接或本地路径";
     await loadPapers();
-    await selectPaper(paper.id);
-    $("libraryDialog").close();
-    toast("论文已导入");
+    if (imported.length) {
+      await selectPaper(imported[imported.length - 1].id);
+      if (failed.length) {
+        restoreFailedImportItems(failed);
+      } else {
+        resetImportForm();
+      }
+    }
+    setImportProgress(importFinishedText(imported, failed));
+    if (!failed.length && imported.length) {
+      $("libraryDialog").close();
+      finalToast = batch ? `已导入 ${imported.length} 篇论文` : "论文已导入";
+    } else if (imported.length) {
+      finalToast = `已导入 ${imported.length} 篇，${failed.length} 篇失败`;
+      finalToastDelay = 9000;
+    } else {
+      finalToast = "导入失败，请检查来源";
+      finalToastDelay = 9000;
+    }
   } catch (error) {
-    toast(error.message, 7000);
+    finalToast = error.message;
+    finalToastDelay = 7000;
   } finally {
     setBusy(false);
+    if (finalToast) toast(finalToast, finalToastDelay);
   }
+}
+
+function parsePaperSources(value) {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function itemImportTitle(title, index, batch) {
+  if (!title) return "";
+  return batch ? `${title} ${index + 1}` : title;
+}
+
+async function importPaperItem(item, title) {
+  let payload = null;
+  if (item.type === "file") {
+    const dataBase64 = await fileToBase64(item.file);
+    payload = {
+      filename: item.file.name,
+      data_base64: dataBase64,
+      title,
+    };
+  } else {
+    payload = item.source.startsWith("http://") || item.source.startsWith("https://")
+      ? { url: item.source, title }
+      : { path: item.source, title };
+  }
+  return api("/api/papers/import", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+function resetImportForm() {
+  $("paperSourceInput").value = "";
+  $("paperTitleInput").value = "";
+  state.selectedFiles = [];
+  $("paperFileInput").value = "";
+  updateChosenPaperFiles();
+}
+
+function restoreFailedImportItems(failed) {
+  const failedItems = failed.map((item) => item.item).filter(Boolean);
+  state.selectedFiles = failedItems
+    .filter((item) => item.type === "file")
+    .map((item) => item.file)
+    .filter(Boolean);
+  $("paperSourceInput").value = failedItems
+    .filter((item) => item.type === "source")
+    .map((item) => item.source)
+    .join("\n");
+  $("paperFileInput").value = "";
+  updateChosenPaperFiles();
+}
+
+function updateChosenPaperFiles() {
+  const count = state.selectedFiles.length;
+  if (!count) {
+    $("chosenFileName").textContent = "也可以粘贴 PDF 链接或本地路径";
+  } else if (count === 1) {
+    $("chosenFileName").textContent = state.selectedFiles[0].name;
+  } else {
+    $("chosenFileName").textContent = `已选择 ${count} 个 PDF`;
+  }
+}
+
+function setImportProgress(text) {
+  const box = $("importProgress");
+  box.textContent = text || "";
+  box.classList.toggle("hidden", !text);
+}
+
+function importProgressText(items, imported, failed, current, index) {
+  const lines = [
+    `正在导入 ${index + 1}/${items.length}: ${current.label}`,
+  ];
+  if (imported.length) lines.push(`已完成 ${imported.length} 篇`);
+  if (failed.length) lines.push(`失败 ${failed.length} 篇`);
+  return lines.join("\n");
+}
+
+function importFinishedText(imported, failed) {
+  const lines = [`完成：${imported.length} 篇成功，${failed.length} 篇失败。`];
+  for (const item of failed.slice(0, 6)) {
+    lines.push(`失败：${item.label} - ${item.message}`);
+  }
+  if (failed.length > 6) lines.push(`还有 ${failed.length - 6} 个失败项未显示。`);
+  return lines.join("\n");
 }
 
 async function selectPaper(paperId, options = {}) {
@@ -3486,8 +3592,8 @@ function bindEvents() {
   $("zoomActualBtn").addEventListener("click", () => setZoomMode("actual"));
   $("chooseFileBtn").addEventListener("click", () => $("paperFileInput").click());
   $("paperFileInput").addEventListener("change", () => {
-    state.selectedFile = $("paperFileInput").files[0] || null;
-    $("chosenFileName").textContent = state.selectedFile ? state.selectedFile.name : "也可以粘贴 PDF 链接或本地路径";
+    state.selectedFiles = [...($("paperFileInput").files || [])];
+    updateChosenPaperFiles();
   });
   $("importPaperBtn").addEventListener("click", importPaper);
   $("initializeBtn").addEventListener("click", initializeConversation);

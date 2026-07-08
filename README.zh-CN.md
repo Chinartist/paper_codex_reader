@@ -89,6 +89,8 @@ $env:PAPER_CODEX_READER_HOME="D:\PaperCodexReaderData"
 - 直接 PDF 链接
 - 文件选择器选择的 PDF 文件
 
+批量导入时，可以在文件选择器里一次选择多个 PDF，或在来源输入框里一行粘贴一个 PDF 链接/绝对路径。
+
 本地路径示例：
 
 ```text
@@ -102,7 +104,7 @@ file:///C:/Users/me/Documents/paper.pdf
 
 ### 论文库
 
-- 从本地 PDF 路径、上传文件或直接 PDF 链接导入论文。
+- 从本地 PDF 路径、上传文件或直接 PDF 链接导入论文，支持批量导入。
 - 在论文库里搜索和排序论文。
 - 修改论文显示名称，不改变原始 PDF 文件名。
 - 可以从论文库删除应用保存的本地 PDF 副本。
