@@ -1137,16 +1137,21 @@ function conversationGroups() {
   const byKey = new Map();
   if (state.activePaper) {
     const key = `paper:${state.activePaper.id}`;
-    const group = {
-      key,
-      paperId: state.activePaper.id,
-      title: state.activePaper.title,
-      conversations: [],
-      fallbackOrder: -1,
-      order: null,
-    };
-    groups.push(group);
-    byKey.set(key, group);
+    const hasConversationGroup = state.conversations.some((conv) =>
+      (conv.folder_key || (conv.paper_id ? `paper:${conv.paper_id}` : "paper:none")) === key
+    );
+    if (!hasConversationGroup) {
+      const group = {
+        key,
+        paperId: state.activePaper.id,
+        title: state.activePaper.title,
+        conversations: [],
+        fallbackOrder: state.conversations.length,
+        order: null,
+      };
+      groups.push(group);
+      byKey.set(key, group);
+    }
   }
   for (const [index, conv] of state.conversations.entries()) {
     const key = conv.folder_key || (conv.paper_id ? `paper:${conv.paper_id}` : "paper:none");
