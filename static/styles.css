@@ -1183,6 +1183,7 @@ body.sidebar-sorting * {
 
 .reader-toolbar,
 .chat-head {
+  position: relative;
   min-height: 78px;
   padding: 14px 18px;
   border-bottom: 1px solid var(--border);
@@ -1193,6 +1194,14 @@ body.sidebar-sorting * {
   justify-content: space-between;
   gap: 12px;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8), 0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.reader-toolbar {
+  z-index: 40;
+}
+
+.chat-head {
+  z-index: 10;
 }
 
 .reader-title {
@@ -1294,6 +1303,7 @@ body.sidebar-sorting * {
 
 .pdf-stage {
   position: relative;
+  z-index: 0;
   flex: 1;
   min-height: 0;
 }
@@ -1410,6 +1420,7 @@ body.sidebar-sorting * {
 .recent-paper-menu,
 .outline-menu {
   position: absolute;
+  z-index: 50;
   top: calc(100% + 8px);
   left: 0;
   width: min(360px, calc(100vw - 40px));
