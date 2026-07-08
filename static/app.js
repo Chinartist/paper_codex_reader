@@ -1199,6 +1199,7 @@ function renderConversationItem(conv) {
       <strong>${escapeHtml(conv.title)}</strong>
       <span class="conversation-actions">
         ${pending ? `<span class="running-badge">${escapeHtml(taskStatusText(pending.status))}</span>` : ""}
+        ${conv.paper_id ? `<button class="open-conversation-paper-btn" type="button" data-paper-id="${escapeHtml(conv.paper_id)}" aria-label="打开对应论文" title="打开对应论文"></button>` : ""}
         <button class="rename-conversation-btn" type="button" data-conversation-id="${escapeHtml(conv.id)}">改名</button>
         <button class="delete-conversation-btn" type="button" data-conversation-id="${escapeHtml(conv.id)}">删除</button>
       </span>
@@ -1211,6 +1212,10 @@ function renderConversationItem(conv) {
   });
   wireSidebarDragHandle(item.querySelector(".conversation-grip"), item, "conversation");
   item.addEventListener("keydown", handleConversationKeyboardReorder);
+  item.querySelector(".open-conversation-paper-btn")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openConversationPaper(conv);
+  });
   item.querySelector(".rename-conversation-btn").addEventListener("click", (event) => {
     event.stopPropagation();
     openRenameConversation(conv.id);
@@ -1220,6 +1225,19 @@ function renderConversationItem(conv) {
     deleteConversation(conv.id);
   });
   return item;
+}
+
+async function openConversationPaper(conv) {
+  if (!conv.paper_id) {
+    toast("这个会话没有绑定论文");
+    return;
+  }
+  const paper = state.papers.find((item) => item.id === conv.paper_id);
+  if (!paper) {
+    toast("对应论文已不存在");
+    return;
+  }
+  await selectPaper(conv.paper_id);
 }
 
 function wireSidebarDragHandle(handle, item, type) {
