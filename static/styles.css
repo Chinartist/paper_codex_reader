@@ -738,6 +738,14 @@ body.sidebar-sorting * {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
+}
+
+.list-title-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conversation-actions {
@@ -748,8 +756,7 @@ body.sidebar-sorting * {
 }
 
 .rename-conversation-btn,
-.delete-conversation-btn,
-.open-conversation-paper-btn {
+.delete-conversation-btn {
   min-height: 28px;
   border-radius: 8px;
   border-color: rgba(148, 163, 184, 0.18);
@@ -761,41 +768,8 @@ body.sidebar-sorting * {
   font-weight: 650;
 }
 
-.open-conversation-paper-btn {
-  position: relative;
-  width: 28px;
-  min-width: 28px;
-  padding: 0;
-  border-radius: 999px;
-  font-size: 0;
-}
-
-.open-conversation-paper-btn::before {
-  content: "";
-  position: absolute;
-  left: 8px;
-  top: 6px;
-  width: 10px;
-  height: 14px;
-  border: 1.5px solid currentColor;
-  border-radius: 3px;
-}
-
-.open-conversation-paper-btn::after {
-  content: "";
-  position: absolute;
-  right: 7px;
-  top: 6px;
-  width: 4px;
-  height: 4px;
-  border-left: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  background: rgba(255, 255, 255, 0.025);
-}
-
 .rename-conversation-btn:hover:not(:disabled),
-.delete-conversation-btn:hover:not(:disabled),
-.open-conversation-paper-btn:hover:not(:disabled) {
+.delete-conversation-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.07);
   border-color: rgba(148, 163, 184, 0.32);
   color: var(--sidebar-text);
