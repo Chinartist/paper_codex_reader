@@ -757,15 +757,18 @@ body.sidebar-sorting * {
 
 .rename-conversation-btn,
 .delete-conversation-btn {
+  position: relative;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
   min-height: 28px;
-  border-radius: 8px;
+  border-radius: 999px;
   border-color: rgba(148, 163, 184, 0.18);
   background: rgba(255, 255, 255, 0.025);
   color: var(--sidebar-muted);
-  padding: 0 8px;
-  font-size: 11px;
+  padding: 0;
+  font-size: 0;
   box-shadow: none;
-  font-weight: 650;
 }
 
 .rename-conversation-btn:hover:not(:disabled),
@@ -777,8 +780,56 @@ body.sidebar-sorting * {
   transform: none;
 }
 
+.rename-conversation-btn::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 15px;
+  width: 12px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: rotate(-42deg);
+}
+
+.rename-conversation-btn::after {
+  content: "";
+  position: absolute;
+  left: 17px;
+  top: 9px;
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: currentColor;
+  transform: rotate(-42deg);
+}
+
 .delete-conversation-btn {
   color: #d08d86;
+}
+
+.delete-conversation-btn::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 11px;
+  width: 10px;
+  height: 10px;
+  border: 1.7px solid currentColor;
+  border-top: 0;
+  border-radius: 0 0 3px 3px;
+}
+
+.delete-conversation-btn::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  width: 12px;
+  height: 4px;
+  border-top: 1.7px solid currentColor;
+  border-radius: 2px 2px 0 0;
+  box-shadow: inset 4px 0 0 -2.8px currentColor, inset -4px 0 0 -2.8px currentColor;
 }
 
 .delete-conversation-btn:hover:not(:disabled) {

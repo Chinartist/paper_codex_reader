@@ -1199,8 +1199,8 @@ function renderConversationItem(conv) {
       <strong>${escapeHtml(conv.title)}</strong>
       <span class="conversation-actions">
         ${pending ? `<span class="running-badge">${escapeHtml(taskStatusText(pending.status))}</span>` : ""}
-        <button class="rename-conversation-btn" type="button" data-conversation-id="${escapeHtml(conv.id)}">改名</button>
-        <button class="delete-conversation-btn" type="button" data-conversation-id="${escapeHtml(conv.id)}">删除</button>
+        <button class="rename-conversation-btn" type="button" data-conversation-id="${escapeHtml(conv.id)}" aria-label="改名" title="改名"></button>
+        <button class="delete-conversation-btn" type="button" data-conversation-id="${escapeHtml(conv.id)}" aria-label="删除" title="删除"></button>
       </span>
     </div>
     <div class="meta">${escapeHtml(pending ? pending.label : subtitle)}</div>
