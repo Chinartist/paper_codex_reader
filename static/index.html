@@ -354,6 +354,19 @@
       </form>
     </dialog>
 
+    <dialog id="mermaidPreviewDialog" class="mermaid-preview-dialog">
+      <div class="mermaid-preview-shell">
+        <div class="dialog-head">
+          <div>
+            <h2>图表预览</h2>
+            <p>滚动查看完整 Mermaid 图表。</p>
+          </div>
+          <button id="closeMermaidPreviewBtn" class="icon-btn dialog-close" type="button" aria-label="关闭" title="关闭">×</button>
+        </div>
+        <div id="mermaidPreviewBody" class="mermaid-preview-body"></div>
+      </div>
+    </dialog>
+
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>

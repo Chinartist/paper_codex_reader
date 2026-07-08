@@ -2040,6 +2040,42 @@ body.resizing-chat {
   background: #ffffff;
   padding: 12px;
   max-width: 100%;
+  display: grid;
+  gap: 10px;
+}
+
+.mermaid-toolbar {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  padding: 2px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.92);
+  backdrop-filter: blur(10px);
+}
+
+.mermaid-toolbar button {
+  min-height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #475569;
+  padding: 0 10px;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mermaid-toolbar button:hover:not(:disabled) {
+  background: #eaf1ff;
+  color: #1d4ed8;
+  box-shadow: none;
+  transform: none;
 }
 
 .markdown-body .mermaid {
@@ -2061,6 +2097,46 @@ body.resizing-chat {
   text-align: left;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 12px;
+}
+
+.mermaid-preview-dialog {
+  width: min(1180px, calc(100vw - 36px));
+  max-height: calc(100dvh - 36px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0;
+  box-shadow: var(--shadow);
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.mermaid-preview-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.46);
+  backdrop-filter: blur(4px);
+}
+
+.mermaid-preview-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  max-height: calc(100dvh - 38px);
+}
+
+.mermaid-preview-body {
+  min-height: 320px;
+  overflow: auto;
+  padding: 18px;
+  background: #f8fafc;
+}
+
+.mermaid-preview-body svg {
+  display: block;
+  width: max-content;
+  max-width: none;
+  min-width: min(760px, 100%);
+  margin: 0 auto;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
 }
 
 .selection-box {
