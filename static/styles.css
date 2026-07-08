@@ -321,6 +321,147 @@ body.chat-collapsed .chat-edge-toggle {
   background: rgba(255, 255, 255, 0.018);
 }
 
+.message-inbox-panel {
+  flex: 0 0 auto;
+  max-height: 216px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.message-inbox-panel .panel-head {
+  margin-bottom: 8px;
+}
+
+.message-inbox-panel h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.message-inbox-count {
+  min-width: 19px;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.18);
+  color: #dbeafe;
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.message-inbox-clear {
+  position: relative;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(226, 232, 240, 0.78);
+  padding: 0;
+  box-shadow: none;
+}
+
+.message-inbox-clear::before,
+.message-inbox-clear::after {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 16px;
+  width: 11px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.message-inbox-clear::before {
+  transform: rotate(45deg);
+}
+
+.message-inbox-clear::after {
+  transform: rotate(-45deg);
+}
+
+.message-inbox-clear:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(148, 163, 184, 0.28);
+  color: #ffffff;
+  transform: none;
+  box-shadow: none;
+}
+
+.message-inbox-list {
+  display: grid;
+  gap: 7px;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.message-inbox-item {
+  width: 100%;
+  min-height: 54px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--sidebar-text);
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  text-align: left;
+  box-shadow: none;
+}
+
+.message-inbox-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.075);
+  border-color: rgba(96, 165, 250, 0.42);
+  color: #ffffff;
+  transform: none;
+  box-shadow: none;
+}
+
+.message-inbox-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #60a5fa;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.12);
+}
+
+.message-inbox-main {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.message-inbox-main strong,
+.message-inbox-main span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-inbox-main strong {
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 720;
+}
+
+.message-inbox-main span,
+.message-inbox-item small {
+  color: var(--sidebar-muted);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.message-inbox-item small {
+  align-self: start;
+  padding-top: 1px;
+  white-space: nowrap;
+}
+
 .secondary-btn,
 .small-btn,
 .icon-btn {
@@ -1950,6 +2091,21 @@ body.resizing-chat {
   line-height: 1.55;
   overflow-wrap: anywhere;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.055);
+}
+
+.message.message-flash {
+  animation: messageFlash 1400ms ease-out;
+}
+
+@keyframes messageFlash {
+  0% {
+    border-color: rgba(37, 99, 235, 0.9);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.16), 0 12px 30px rgba(15, 23, 42, 0.09);
+  }
+  100% {
+    border-color: var(--border);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.055);
+  }
 }
 
 .message.user {

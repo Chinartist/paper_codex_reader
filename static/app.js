@@ -14,6 +14,7 @@ const DEFAULT_PROMPT_TEMPLATES = [
 const CONVERSATION_DRAFTS_KEY = "paperCodexConversationDrafts";
 const RECENT_PAPERS_KEY = "paperCodexRecentPapers";
 const READING_STATE_KEY = "paperCodexReadingState";
+const MESSAGE_INBOX_KEY = "paperCodexMessageInbox";
 const RECENT_PAPER_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MAX_SAVED_CONVERSATION_POSITIONS = 80;
 const MAX_MESSAGE_ATTACHMENTS = 8;
@@ -40,6 +41,9 @@ const state = {
   pending: {},
   tasks: [],
   taskStatuses: {},
+  tasksLoaded: false,
+  messageInbox: loadMessageInbox(),
+  messageFlashTimer: 0,
   pdfDoc: null,
   pdfUrl: "",
   pdfRenderToken: 0,
@@ -158,6 +162,7 @@ async function loadInitialData() {
   await Promise.all([loadSettings(), loadStatus()]);
   await loadPapers();
   await loadConversations();
+  renderMessageInbox();
   await loadTasks({ silent: true });
   await restoreSavedConversation();
   updateContextHint();
@@ -263,6 +268,19 @@ function formatTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "未知";
   return date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function relativeTime(value) {
+  const time = Date.parse(value || "");
+  if (!Number.isFinite(time)) return "刚刚";
+  const diff = Math.max(0, Date.now() - time);
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "刚刚";
+  if (minutes < 60) return `${minutes}分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}小时前`;
+  const days = Math.floor(hours / 24);
+  return `${days}天前`;
 }
 
 function accountDisplayName(account) {
@@ -558,6 +576,125 @@ function loadRecentPapers() {
 
 function saveRecentPapers() {
   localStorage.setItem(RECENT_PAPERS_KEY, JSON.stringify(state.recentPapers.slice(0, 30)));
+}
+
+function loadMessageInbox() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(MESSAGE_INBOX_KEY) || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => item && item.id && item.conversation_id && item.message_id)
+      .map((item) => ({
+        id: String(item.id),
+        conversation_id: String(item.conversation_id),
+        message_id: String(item.message_id),
+        conversation_title: String(item.conversation_title || "对话"),
+        paper_title: String(item.paper_title || ""),
+        preview: String(item.preview || "新回答已完成"),
+        created_at: item.created_at || new Date().toISOString(),
+      }))
+      .slice(0, 50);
+  } catch {
+    return [];
+  }
+}
+
+function saveMessageInbox() {
+  try {
+    localStorage.setItem(MESSAGE_INBOX_KEY, JSON.stringify(state.messageInbox.slice(0, 50)));
+  } catch {
+    // Message inbox is only a notification layer; losing it must not block chat.
+  }
+}
+
+function messagePreview(content) {
+  const text = String(content || "")
+    .replace(/```[\s\S]*?```/g, " [代码/图表] ")
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, " [图片] ")
+    .replace(/\[[^\]]+\]\([^)]+\)/g, (match) => match.replace(/^\[|\]\([^)]+\)$/g, ""))
+    .replace(/[#>*_`|~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text ? text.slice(0, 120) : "新回答已完成";
+}
+
+function renderMessageInbox() {
+  const panel = $("messageInboxPanel");
+  const list = $("messageInboxList");
+  if (!panel || !list) return;
+  panel.classList.toggle("hidden", state.messageInbox.length === 0);
+  $("messageInboxCount").textContent = String(state.messageInbox.length);
+  list.innerHTML = "";
+  for (const item of state.messageInbox) {
+    const node = document.createElement("button");
+    node.className = "message-inbox-item";
+    node.type = "button";
+    node.dataset.inboxId = item.id;
+    node.innerHTML = `
+      <span class="message-inbox-dot" aria-hidden="true"></span>
+      <span class="message-inbox-main">
+        <strong>${escapeHtml(item.conversation_title)}</strong>
+        <span>${escapeHtml(item.preview)}</span>
+      </span>
+      <small>${escapeHtml(relativeTime(item.created_at))}</small>
+    `;
+    node.addEventListener("click", () => openInboxMessage(item.id));
+    list.appendChild(node);
+  }
+}
+
+async function addInboxNotificationForTask(task) {
+  if (!task || task.status !== "done" || task.conversation_id === state.activeConversation?.id) return;
+  try {
+    const messages = await api(`/api/conversations/${task.conversation_id}/messages`);
+    const assistantMessages = messages.filter((message) => message.role === "assistant");
+    const message = assistantMessages.find((item) => item.parent_message_id && item.parent_message_id === task.user_message_id)
+      || assistantMessages[assistantMessages.length - 1];
+    if (!message?.id) return;
+    const notificationId = `message:${message.id}`;
+    if (state.messageInbox.some((item) => item.id === notificationId || item.message_id === message.id)) return;
+    const conversation = state.conversations.find((conv) => conv.id === task.conversation_id);
+    state.messageInbox = [
+      {
+        id: notificationId,
+        conversation_id: task.conversation_id,
+        message_id: message.id,
+        conversation_title: conversation?.title || "对话",
+        paper_title: conversation?.paper_title || "",
+        preview: messagePreview(message.content),
+        created_at: message.created_at || task.updated_at || new Date().toISOString(),
+      },
+      ...state.messageInbox,
+    ].slice(0, 50);
+    saveMessageInbox();
+    renderMessageInbox();
+  } catch (error) {
+    console.warn("Could not add message inbox item", error);
+  }
+}
+
+async function addInboxNotificationsForTasks(tasks) {
+  for (const task of tasks) {
+    await addInboxNotificationForTask(task);
+  }
+}
+
+async function openInboxMessage(inboxId) {
+  const item = state.messageInbox.find((entry) => entry.id === inboxId);
+  if (!item) return;
+  await selectConversation(item.conversation_id, {
+    restoreMessagePosition: false,
+    messageId: item.message_id,
+  });
+  state.messageInbox = state.messageInbox.filter((entry) => entry.id !== inboxId);
+  saveMessageInbox();
+  renderMessageInbox();
+}
+
+function clearMessageInbox() {
+  state.messageInbox = [];
+  saveMessageInbox();
+  renderMessageInbox();
 }
 
 function loadReadingState() {
@@ -1076,6 +1213,7 @@ async function loadConversations() {
     state.activeConversation = state.conversations.find((conv) => conv.id === state.activeConversation.id) || null;
   }
   renderConversations();
+  renderMessageInbox();
   updateContextHint();
 }
 
@@ -1591,6 +1729,9 @@ async function selectConversation(convId, options = {}) {
     saveActiveConversationChoice();
   }
   await loadMessages({ restoreMessagePosition: options.restoreMessagePosition !== false });
+  if (options.messageId) {
+    jumpToMessage(options.messageId);
+  }
   restoreActiveConversationDraft();
   updateComposerMode();
   updateContextHint();
@@ -2416,18 +2557,21 @@ async function sendMessage() {
 
 async function loadTasks({ silent } = { silent: false }) {
   const previous = { ...state.taskStatuses };
+  const hadTaskSnapshot = state.tasksLoaded;
   state.tasks = await api("/api/tasks");
   state.taskStatuses = Object.fromEntries(state.tasks.map((task) => [task.id, task.status]));
+  state.tasksLoaded = true;
   renderTasks();
   renderConversations();
   showActiveWorkStatus();
 
-  const changedToFinal = state.tasks.filter((task) => {
+  const changedToFinal = hadTaskSnapshot ? state.tasks.filter((task) => {
     const oldStatus = previous[task.id];
     return oldStatus !== task.status && ["done", "error", "canceled"].includes(task.status);
-  });
+  }) : [];
   if (changedToFinal.length) {
     await loadConversations();
+    await addInboxNotificationsForTasks(changedToFinal.filter((task) => task.status === "done"));
     if (state.activeConversation && changedToFinal.some((task) => task.conversation_id === state.activeConversation.id)) {
       await loadMessages({ forceBottom: true });
     }
@@ -2672,6 +2816,31 @@ function updateAnswerNavButtons() {
   const hasAnswers = answerNodes().length > 0;
   $("prevAnswerBtn").disabled = !hasAnswers;
   $("nextAnswerBtn").disabled = !hasAnswers;
+}
+
+function cssEscape(value) {
+  if (window.CSS?.escape) return window.CSS.escape(String(value));
+  return String(value).replace(/["\\]/g, "\\$&");
+}
+
+function jumpToMessage(messageId) {
+  const box = $("messages");
+  const target = box.querySelector(`.message[data-message-id="${cssEscape(messageId)}"]`);
+  if (!target) {
+    scrollMessages();
+    return;
+  }
+  const reveal = () => {
+    box.scrollTo({ top: Math.max(0, target.offsetTop - 12), behavior: "smooth" });
+    window.clearTimeout(state.messageFlashTimer);
+    target.classList.remove("message-flash");
+    target.getBoundingClientRect();
+    target.classList.add("message-flash");
+    state.messageFlashTimer = window.setTimeout(() => target.classList.remove("message-flash"), 1800);
+    saveCurrentConversationPosition();
+  };
+  reveal();
+  window.requestAnimationFrame(reveal);
 }
 
 function jumpAnswer(direction) {
@@ -4192,6 +4361,7 @@ function bindEvents() {
   $("prevAnswerBtn").addEventListener("click", () => jumpAnswer(-1));
   $("nextAnswerBtn").addEventListener("click", () => jumpAnswer(1));
   $("queueToggleBtn").addEventListener("click", toggleQueuePanel);
+  $("clearMessageInboxBtn").addEventListener("click", clearMessageInbox);
   populateModelSelects();
   $("openLibraryBtn").addEventListener("click", () => $("libraryDialog").showModal());
   $("paperSearchInput").addEventListener("input", (event) => {

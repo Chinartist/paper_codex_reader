@@ -24,6 +24,14 @@
         <button id="openLibraryBtn" class="secondary-btn" type="button">论文库</button>
       </section>
 
+      <section id="messageInboxPanel" class="panel message-inbox-panel hidden" aria-label="已完成消息">
+        <div class="panel-head">
+          <h2>消息 <span id="messageInboxCount" class="message-inbox-count">0</span></h2>
+          <button id="clearMessageInboxBtn" class="message-inbox-clear" type="button" aria-label="清空消息" title="清空"></button>
+        </div>
+        <div id="messageInboxList" class="message-inbox-list"></div>
+      </section>
+
       <section class="panel grow conversations-panel">
         <div class="panel-head">
           <h2>历史对话</h2>
