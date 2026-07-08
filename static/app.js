@@ -1686,6 +1686,7 @@ function appendMessage(role, content, meta = {}) {
     node.querySelector(".edit-message-btn").addEventListener("click", () => startResendEdit(content, meta.id || ""));
   }
   box.appendChild(node);
+  renderMermaidDiagrams(node);
   updateAnswerNavButtons();
 }
 
@@ -1702,6 +1703,7 @@ function markdownToHtml(value) {
   let index = 0;
   let inCode = false;
   let codeLines = [];
+  let codeLanguage = "";
   let listType = "";
 
   const closeList = () => {
@@ -1711,8 +1713,15 @@ function markdownToHtml(value) {
   };
 
   const flushCode = () => {
-    html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+    const source = codeLines.join("\n");
+    if (codeLanguage === "mermaid") {
+      html.push(`<div class="mermaid-block"><pre class="mermaid">${escapeHtml(source)}</pre></div>`);
+    } else {
+      const languageClass = codeLanguage ? ` class="language-${escapeHtml(codeLanguage)}"` : "";
+      html.push(`<pre><code${languageClass}>${escapeHtml(source)}</code></pre>`);
+    }
     codeLines = [];
+    codeLanguage = "";
   };
 
   while (index < lines.length) {
@@ -1727,6 +1736,7 @@ function markdownToHtml(value) {
         closeList();
         inCode = true;
         codeLines = [];
+        codeLanguage = parseCodeLanguage(line);
       }
       index += 1;
       continue;
@@ -1802,6 +1812,53 @@ function markdownToHtml(value) {
   if (inCode) flushCode();
   closeList();
   return html.join("");
+}
+
+function parseCodeLanguage(fenceLine) {
+  const match = /^```\s*([A-Za-z0-9_-]+)?/.exec(fenceLine.trim());
+  return (match?.[1] || "").toLowerCase();
+}
+
+function setupMermaid() {
+  if (!window.mermaid) return;
+  try {
+    window.mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: "base",
+      flowchart: {
+        htmlLabels: true,
+        curve: "basis",
+      },
+      themeVariables: {
+        fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        primaryColor: "#eef4ff",
+        primaryTextColor: "#0f172a",
+        primaryBorderColor: "#bfdbfe",
+        lineColor: "#64748b",
+        secondaryColor: "#f8fafc",
+        tertiaryColor: "#ffffff",
+        clusterBkg: "#f8fafc",
+        clusterBorder: "#cbd5e1",
+        edgeLabelBackground: "#ffffff",
+      },
+    });
+  } catch (error) {
+    console.warn("Mermaid initialization failed", error);
+  }
+}
+
+function renderMermaidDiagrams(root = document) {
+  if (!window.mermaid) return;
+  const nodes = [...root.querySelectorAll(".mermaid:not([data-processed])")];
+  if (!nodes.length) return;
+  window.mermaid.run({ nodes }).catch((error) => {
+    for (const node of nodes) {
+      node.classList.add("mermaid-error");
+      node.dataset.processed = "true";
+    }
+    console.warn("Mermaid rendering failed", error);
+  });
 }
 
 function inlineMarkdown(value) {
@@ -3661,6 +3718,7 @@ function escapeHtml(value) {
 }
 
 function bindEvents() {
+  setupMermaid();
   setupChatResizer();
   renderPromptTemplates();
   $("collapseSidebarBtn").addEventListener("click", () => setSidebarCollapsed(true));

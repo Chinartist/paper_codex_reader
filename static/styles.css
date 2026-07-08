@@ -2033,6 +2033,36 @@ body.resizing-chat {
   white-space: pre;
 }
 
+.mermaid-block {
+  overflow: auto;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 12px;
+  max-width: 100%;
+}
+
+.markdown-body .mermaid {
+  display: block;
+  min-width: max-content;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: #0f172a;
+  text-align: center;
+}
+
+.markdown-body .mermaid svg {
+  max-width: none;
+}
+
+.markdown-body .mermaid-error {
+  white-space: pre;
+  text-align: left;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
 .selection-box {
   position: fixed;
   z-index: 90;

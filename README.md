@@ -141,7 +141,7 @@ file:///C:/Users/me/Documents/paper.pdf
 - Use `读全文` to send the current PDF path as a Codex-style `@file` reference and let the same conversation read the whole paper.
 - For selected passages, the default prompt asks Codex to translate first and then analyze briefly.
 - Add multiple selected passages to one message before sending.
-- Assistant replies render common Markdown such as lists, quotes, inline code, and code blocks.
+- Assistant replies render common Markdown such as lists, quotes, inline code, code blocks, and fenced `mermaid` diagrams.
 
 ### Conversations And Tasks
 
