@@ -119,6 +119,7 @@ file:///C:/Users/me/Documents/paper.pdf
 - Add or edit notes on a highlight. Manual notes and Codex answers use the same saved field, so you can overwrite a Codex answer with your own wording.
 - Delete a highlight from the note card; its note and attached Codex answer are removed with it.
 - Zoom in, zoom out, fit to width, or return to 100%.
+- If a PDF has built-in bookmarks, a local `目录` menu appears above the reader for direct section jumps.
 - Preserve the reading position when zooming or resizing panels.
 - Lazy-render visible pages so large PDFs stay responsive.
 - Collapse or expand the left paper/conversation sidebar and the right chat sidebar.

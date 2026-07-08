@@ -43,6 +43,7 @@ const state = {
   pdfDoc: null,
   pdfUrl: "",
   pdfRenderToken: 0,
+  pdfOutline: [],
   pageObserver: null,
   renderedPages: new Set(),
   renderingPages: new Set(),
@@ -1044,7 +1045,9 @@ async function selectPaper(paperId, options = {}) {
   } else {
     state.pdfDoc = null;
     state.pdfUrl = "";
+    state.pdfOutline = [];
     state.highlights = [];
+    renderPdfOutline();
     $("pdfViewer").innerHTML = `
       <div class="empty-state">
         <h2>打开论文库选择 PDF</h2>
@@ -2686,7 +2689,105 @@ async function renderPdf(url) {
     state.pdfDoc = await pdfjsLib.getDocument(url).promise;
   }
   if (token !== state.pdfRenderToken) return;
+  await loadPdfOutline(token);
   await renderPdfPages(token);
+}
+
+async function loadPdfOutline(token = state.pdfRenderToken) {
+  state.pdfOutline = [];
+  renderPdfOutline();
+  if (!state.pdfDoc) return;
+  try {
+    const outline = await state.pdfDoc.getOutline();
+    if (token !== state.pdfRenderToken) return;
+    state.pdfOutline = flattenPdfOutline(outline || []);
+    renderPdfOutline();
+  } catch (error) {
+    console.warn("PDF outline unavailable", error);
+    renderPdfOutline();
+  }
+}
+
+function flattenPdfOutline(items, level = 0, result = []) {
+  for (const item of items || []) {
+    const title = String(item.title || "").trim();
+    if (title && (item.dest || item.url)) {
+      result.push({
+        title,
+        dest: item.dest || null,
+        url: item.url || "",
+        level: Math.min(level, 4),
+      });
+    }
+    if (item.items?.length) flattenPdfOutline(item.items, level + 1, result);
+  }
+  return result.slice(0, 160);
+}
+
+function renderPdfOutline() {
+  const switcher = $("outlineSwitcher");
+  const menu = $("outlineMenu");
+  const trigger = $("outlineTrigger");
+  if (!switcher || !menu || !trigger) return;
+  const items = state.pdfOutline || [];
+  switcher.classList.toggle("hidden", !items.length);
+  trigger.disabled = !items.length;
+  trigger.setAttribute("aria-expanded", "false");
+  if (!items.length) {
+    menu.innerHTML = "";
+    return;
+  }
+  menu.innerHTML = `
+    <div class="outline-menu-title">PDF 目录</div>
+    ${items.map((item, index) => `
+      <button
+        class="outline-item"
+        style="--outline-level: ${item.level}"
+        type="button"
+        role="menuitem"
+        data-outline-index="${index}"
+        title="${escapeHtml(item.title)}"
+      >
+        <span>${escapeHtml(item.title)}</span>
+      </button>
+    `).join("")}
+  `;
+}
+
+async function openOutlineItem(index) {
+  const item = state.pdfOutline[Number(index)];
+  if (!item) return;
+  if (item.url) {
+    window.open(item.url, "_blank", "noopener");
+    return;
+  }
+  try {
+    const pageNumber = await pageNumberForPdfDestination(item.dest);
+    if (!pageNumber) {
+      toast("无法定位这个目录项");
+      return;
+    }
+    jumpToPdfPage(pageNumber);
+  } catch (error) {
+    toast(error.message || "目录跳转失败", 7000);
+  }
+}
+
+async function pageNumberForPdfDestination(dest) {
+  if (!state.pdfDoc || !dest) return null;
+  const explicit = Array.isArray(dest) ? dest : await state.pdfDoc.getDestination(dest);
+  const target = explicit?.[0];
+  if (typeof target === "number") return target + 1;
+  if (target) return (await state.pdfDoc.getPageIndex(target)) + 1;
+  return null;
+}
+
+function jumpToPdfPage(pageNumber) {
+  const viewer = $("pdfViewer");
+  const page = viewer.querySelector(`.pdf-page[data-page="${pageNumber}"]`);
+  if (!page) return;
+  viewer.scrollTo({ top: Math.max(0, page.offsetTop - 18), behavior: "smooth" });
+  window.setTimeout(() => queueVisiblePages(state.pdfRenderToken), 220);
 }
 
 async function renderPdfPages(token = ++state.pdfRenderToken) {
@@ -4103,6 +4204,32 @@ function bindEvents() {
     const item = event.target.closest(".recent-paper-item");
     if (!item?.dataset.paperId) return;
     selectPaper(item.dataset.paperId).catch((error) => toast(error.message, 7000));
+  });
+  $("outlineSwitcher").addEventListener("mouseenter", () => {
+    $("outlineTrigger").setAttribute("aria-expanded", "true");
+  });
+  $("outlineSwitcher").addEventListener("mouseleave", () => {
+    if (!$("outlineSwitcher").classList.contains("open")) {
+      $("outlineTrigger").setAttribute("aria-expanded", "false");
+    }
+  });
+  $("outlineTrigger").addEventListener("click", (event) => {
+    event.stopPropagation();
+    const open = !$("outlineSwitcher").classList.contains("open");
+    $("outlineSwitcher").classList.toggle("open", open);
+    $("outlineTrigger").setAttribute("aria-expanded", String(open));
+  });
+  $("outlineMenu").addEventListener("click", (event) => {
+    const item = event.target.closest(".outline-item");
+    if (!item?.dataset.outlineIndex) return;
+    $("outlineSwitcher").classList.remove("open");
+    $("outlineTrigger").setAttribute("aria-expanded", "false");
+    openOutlineItem(item.dataset.outlineIndex);
+  });
+  document.addEventListener("click", (event) => {
+    if (event.target.closest("#outlineSwitcher")) return;
+    $("outlineSwitcher").classList.remove("open");
+    $("outlineTrigger").setAttribute("aria-expanded", "false");
   });
   $("zoomOutBtn").addEventListener("click", () => zoomBy(1 / 1.15));
   $("zoomInBtn").addEventListener("click", () => zoomBy(1.15));
