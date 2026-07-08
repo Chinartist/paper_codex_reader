@@ -454,6 +454,7 @@ class Store:
                     conversation_id text not null,
                     role text not null,
                     content text not null,
+                    parent_message_id text,
                     created_at text not null,
                     foreign key (conversation_id) references conversations(id)
                 );
@@ -489,6 +490,9 @@ class Store:
             }
             for key, value in defaults.items():
                 con.execute("insert or ignore into settings(key, value) values (?, ?)", (key, value))
+            message_columns = {row["name"] for row in con.execute("pragma table_info(messages)").fetchall()}
+            if "parent_message_id" not in message_columns:
+                con.execute("alter table messages add column parent_message_id text")
 
     def find_codex_path(self) -> str:
         for path in codex_candidates():
@@ -930,16 +934,32 @@ class Store:
                     (session_id, stamp, conv_id),
                 )
 
-    def add_message(self, conv_id: str, role: str, content: str) -> Dict[str, Any]:
+    def add_message(
+        self,
+        conv_id: str,
+        role: str,
+        content: str,
+        parent_message_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         msg_id = str(uuid.uuid4())
         stamp = now_iso()
         with self.connect() as con:
             con.execute(
-                "insert into messages(id, conversation_id, role, content, created_at) values (?, ?, ?, ?, ?)",
-                (msg_id, conv_id, role, content, stamp),
+                """
+                insert into messages(id, conversation_id, role, content, parent_message_id, created_at)
+                values (?, ?, ?, ?, ?, ?)
+                """,
+                (msg_id, conv_id, role, content, parent_message_id, stamp),
             )
             con.execute("update conversations set updated_at = ? where id = ?", (stamp, conv_id))
-        return {"id": msg_id, "conversation_id": conv_id, "role": role, "content": content, "created_at": stamp}
+        return {
+            "id": msg_id,
+            "conversation_id": conv_id,
+            "role": role,
+            "content": content,
+            "parent_message_id": parent_message_id,
+            "created_at": stamp,
+        }
 
     def update_message_content(self, conv_id: str, msg_id: str, content: str) -> Dict[str, Any]:
         clean_content = content.strip()
@@ -1327,8 +1347,19 @@ class TaskManager:
             },
         )
 
-    def enqueue_initialize(self, conversation_id: str, paper_id: str, label: str) -> Dict[str, Any]:
-        return self._enqueue(conversation_id, "initialize", label, {"paper_id": paper_id})
+    def enqueue_initialize(
+        self,
+        conversation_id: str,
+        paper_id: str,
+        label: str,
+        user_message_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        return self._enqueue(
+            conversation_id,
+            "initialize",
+            label,
+            {"paper_id": paper_id, "user_message_id": user_message_id},
+        )
 
     def _enqueue(self, conversation_id: str, kind: str, label: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         task_id = str(uuid.uuid4())
@@ -1391,11 +1422,17 @@ class TaskManager:
                 task["conversation_id"],
                 task.get("prompt") or "",
                 event,
+                task.get("user_message_id") or None,
                 task.get("image_paths") or [],
                 task.get("highlight_id") or None,
             )
         elif kind == "initialize":
-            self._run_initialize(task["conversation_id"], task.get("paper_id") or "", event)
+            self._run_initialize(
+                task["conversation_id"],
+                task.get("paper_id") or "",
+                event,
+                task.get("user_message_id") or None,
+            )
         else:
             raise RuntimeError("Unknown task type.")
 
@@ -1404,6 +1441,7 @@ class TaskManager:
         conversation_id: str,
         prompt: str,
         event: threading.Event,
+        parent_message_id: Optional[str] = None,
         image_paths: Optional[List[str]] = None,
         highlight_id: Optional[str] = None,
     ) -> None:
@@ -1414,18 +1452,24 @@ class TaskManager:
             raise RuntimeError("Message is empty.")
         answer, session_id = self.codex.send(conv, prompt, event, image_paths)
         self.store.update_conversation_session(conversation_id, session_id, initialized=False)
-        self.store.add_message(conversation_id, "assistant", answer)
+        self.store.add_message(conversation_id, "assistant", answer, parent_message_id=parent_message_id)
         if highlight_id:
             self.store.update_highlight_answer(highlight_id, conversation_id, answer)
 
-    def _run_initialize(self, conversation_id: str, paper_id: str, event: threading.Event) -> None:
+    def _run_initialize(
+        self,
+        conversation_id: str,
+        paper_id: str,
+        event: threading.Event,
+        parent_message_id: Optional[str] = None,
+    ) -> None:
         conv = self.store.get_conversation(conversation_id)
         paper = self.store.get_paper(paper_id)
         if not conv or not paper:
             raise RuntimeError("Conversation or paper not found.")
         answer, session_id = self.codex.initialize_with_paper(conv, paper, event)
         self.store.update_conversation_session(conversation_id, session_id, initialized=True)
-        self.store.add_message(conversation_id, "assistant", answer)
+        self.store.add_message(conversation_id, "assistant", answer, parent_message_id=parent_message_id)
 
     def _mark(self, task_id: str, status: str) -> None:
         with self.condition:
@@ -1485,7 +1529,6 @@ class TaskManager:
         else:
             public.pop("editable_content", None)
         public.pop("prompt", None)
-        public.pop("user_message_id", None)
         public.pop("paper_id", None)
         public.pop("attachment_paths", None)
         public.pop("image_paths", None)
@@ -1790,7 +1833,7 @@ class AppHandler(SimpleHTTPRequestHandler):
         if not paper:
             raise ValueError("Paper not found.")
         user_msg = self.store.add_message(conv_id, "user", f"读全文：{paper['title']}")
-        task = self.tasks.enqueue_initialize(conv_id, paper["id"], f"读全文：{paper['title']}")
+        task = self.tasks.enqueue_initialize(conv_id, paper["id"], f"读全文：{paper['title']}", user_msg["id"])
         json_response(self, {"user": user_msg, "task": task})
 
     def handle_message(self, conv_id: str) -> None:

@@ -58,6 +58,7 @@ const state = {
   chatWidth: Number(localStorage.getItem("paperCodexChatWidth") || "440"),
   sidebarCollapsed: localStorage.getItem("paperCodexSidebarCollapsed") === "true",
   chatCollapsed: localStorage.getItem("paperCodexChatCollapsed") === "true",
+  queueCollapsed: localStorage.getItem("paperCodexQueueCollapsed") === "true",
   promptTemplates: loadPromptTemplates(),
   conversationDrafts: loadConversationDrafts(),
   recentPapers: loadRecentPapers(),
@@ -1588,16 +1589,21 @@ async function loadMessages(options = {}) {
         <p>右下角输入问题会自动创建当前论文对话。想先让 Codex 读完整篇，就点“读全文”。</p>
       </div>
     `;
+    updateAnswerNavButtons();
     return;
   }
   const messages = await api(`/api/conversations/${state.activeConversation.id}/messages`);
-  for (const msg of messages) {
-    appendMessage(msg.role, msg.content, msg);
+  const activeTasks = state.tasks.filter((task) =>
+    task.conversation_id === state.activeConversation.id && isActiveTask(task)
+  );
+  for (const item of conversationTimeline(messages, activeTasks)) {
+    if (item.type === "task") {
+      appendTaskPlaceholder(item.task);
+    } else {
+      appendMessage(item.message.role, item.message.content, item.message);
+    }
   }
-  const active = activeTaskForConversation(state.activeConversation.id);
-  if (active) {
-    appendTaskPlaceholder(active);
-  }
+  updateAnswerNavButtons();
   if (forceBottom) {
     scrollMessages();
   } else if (restoreMessagePosition) {
@@ -1607,12 +1613,56 @@ async function loadMessages(options = {}) {
   }
 }
 
+function conversationTimeline(messages, tasks = []) {
+  const sortedMessages = [...messages].sort((a, b) => messageTime(a) - messageTime(b));
+  const byId = new Map(sortedMessages.map((message) => [message.id, message]));
+  const childMessages = new Map();
+  for (const message of sortedMessages) {
+    if (!message.parent_message_id || !byId.has(message.parent_message_id)) continue;
+    if (!childMessages.has(message.parent_message_id)) childMessages.set(message.parent_message_id, []);
+    childMessages.get(message.parent_message_id).push(message);
+  }
+  const taskByParent = new Map();
+  for (const task of tasks) {
+    if (!task.user_message_id) continue;
+    if (!taskByParent.has(task.user_message_id)) taskByParent.set(task.user_message_id, []);
+    taskByParent.get(task.user_message_id).push(task);
+  }
+  const seen = new Set();
+  const timeline = [];
+  for (const message of sortedMessages) {
+    if (seen.has(message.id)) continue;
+    if (message.parent_message_id && byId.has(message.parent_message_id)) continue;
+    timeline.push({ type: "message", message });
+    seen.add(message.id);
+    for (const child of childMessages.get(message.id) || []) {
+      timeline.push({ type: "message", message: child });
+      seen.add(child.id);
+    }
+    for (const task of taskByParent.get(message.id) || []) {
+      timeline.push({ type: "task", task });
+    }
+  }
+  for (const task of tasks.filter((task) => !task.user_message_id || !byId.has(task.user_message_id))) {
+    timeline.push({ type: "task", task });
+  }
+  return timeline;
+}
+
+function messageTime(message) {
+  const stamp = Date.parse(message.created_at || message.updated_at || "");
+  return Number.isFinite(stamp) ? stamp : 0;
+}
+
 function appendMessage(role, content, meta = {}) {
   const box = $("messages");
   const node = document.createElement("div");
   node.className = `message ${role}`;
   if (meta.id) {
     node.dataset.messageId = meta.id;
+  }
+  if (meta.parent_message_id) {
+    node.dataset.parentMessageId = meta.parent_message_id;
   }
   node.innerHTML = `
     <div class="role">${role === "user" ? "你" : "Codex"}</div>
@@ -1631,6 +1681,7 @@ function appendMessage(role, content, meta = {}) {
     node.querySelector(".edit-message-btn").addEventListener("click", () => startResendEdit(content, meta.id || ""));
   }
   box.appendChild(node);
+  updateAnswerNavButtons();
 }
 
 function renderMessageContent(role, content) {
@@ -1878,6 +1929,9 @@ async function initializeConversation() {
     });
     await loadConversations();
     await loadTasks({ silent: true });
+    if (state.activeConversation?.id === convId) {
+      await loadMessages({ forceBottom: true });
+    }
     updateContextHint();
     scrollMessages();
     toast("读全文任务已加入队列");
@@ -1931,6 +1985,9 @@ async function sendMessage() {
     });
     await loadConversations();
     await loadTasks({ silent: true });
+    if (state.activeConversation?.id === convId) {
+      await loadMessages({ forceBottom: true });
+    }
     updateContextHint();
     state.editingResendMessageId = null;
     updateComposerMode();
@@ -1980,7 +2037,10 @@ function renderTasks() {
   if (state.draggingTaskId) return;
   const activeTasks = state.tasks.filter((task) => isActiveTask(task));
   $("queuePanel").classList.toggle("hidden", activeTasks.length === 0);
+  $("queuePanel").classList.toggle("collapsed", state.queueCollapsed);
   $("queueCount").textContent = String(activeTasks.length);
+  $("queueToggleBtn").setAttribute("aria-expanded", String(!state.queueCollapsed));
+  $("queueToggleLabel").textContent = state.queueCollapsed ? "展开" : "收起";
   const runningCount = activeTasks.filter((task) => task.status === "running" || task.status === "canceling").length;
   const queuedCount = activeTasks.filter((task) => task.status === "queued").length;
   $("queueSummary").textContent = activeTasks.length ? `运行 ${runningCount} · 排队 ${queuedCount}` : "没有运行中的任务";
@@ -2023,6 +2083,12 @@ function renderTasks() {
     list.appendChild(item);
   }
   updateButtons();
+}
+
+function toggleQueuePanel() {
+  state.queueCollapsed = !state.queueCollapsed;
+  localStorage.setItem("paperCodexQueueCollapsed", String(state.queueCollapsed));
+  renderTasks();
 }
 
 function taskQueueTitle(task) {
@@ -2176,11 +2242,38 @@ function appendTaskPlaceholder(task) {
   const box = $("messages");
   const node = document.createElement("div");
   node.className = `message assistant task-placeholder ${task.status}`;
+  if (task.user_message_id) {
+    node.dataset.parentMessageId = task.user_message_id;
+  }
   node.innerHTML = `
     <div class="role">Codex · ${escapeHtml(taskStatusText(task.status))}</div>
     <pre>${escapeHtml(task.label || "正在处理")}</pre>
   `;
   box.appendChild(node);
+}
+
+function answerNodes() {
+  return [...$("messages").querySelectorAll(".message.assistant:not(.task-placeholder)")];
+}
+
+function updateAnswerNavButtons() {
+  const hasAnswers = answerNodes().length > 0;
+  $("prevAnswerBtn").disabled = !hasAnswers;
+  $("nextAnswerBtn").disabled = !hasAnswers;
+}
+
+function jumpAnswer(direction) {
+  const answers = answerNodes();
+  if (!answers.length) return;
+  const box = $("messages");
+  const currentTop = box.scrollTop + 8;
+  let target = null;
+  if (direction < 0) {
+    target = [...answers].reverse().find((node) => node.offsetTop < currentTop - 8) || answers[0];
+  } else {
+    target = answers.find((node) => node.offsetTop > currentTop + 8) || answers[answers.length - 1];
+  }
+  box.scrollTo({ top: Math.max(0, target.offsetTop - 10), behavior: "smooth" });
 }
 
 async function renderPdf(url) {
@@ -2888,6 +2981,9 @@ async function sendSelectionImmediately() {
     });
     await loadConversations();
     await loadTasks({ silent: true });
+    if (state.activeConversation?.id === convId) {
+      await loadMessages({ forceBottom: true });
+    }
     if (highlightId) refreshHighlightAnswer(highlightId);
     updateContextHint();
     toast("选区已加入队列");
@@ -3566,6 +3662,9 @@ function bindEvents() {
   $("expandSidebarBtn").addEventListener("click", () => setSidebarCollapsed(false));
   $("collapseChatBtn").addEventListener("click", () => setChatCollapsed(true));
   $("expandChatBtn").addEventListener("click", () => setChatCollapsed(false));
+  $("prevAnswerBtn").addEventListener("click", () => jumpAnswer(-1));
+  $("nextAnswerBtn").addEventListener("click", () => jumpAnswer(1));
+  $("queueToggleBtn").addEventListener("click", toggleQueuePanel);
   populateModelSelects();
   $("openLibraryBtn").addEventListener("click", () => $("libraryDialog").showModal());
   $("paperSearchInput").addEventListener("input", (event) => {

@@ -96,7 +96,13 @@
             <h2 id="chatTitle">新对话</h2>
             <p id="contextHint" class="context-hint">当前上下文：未选择论文</p>
           </div>
-          <button id="collapseChatBtn" class="icon-btn panel-toggle" type="button" aria-label="收起右侧栏" title="收起右侧栏">&gt;</button>
+          <div class="chat-head-actions">
+            <div class="answer-nav" aria-label="回答跳转">
+              <button id="prevAnswerBtn" class="icon-btn" type="button" aria-label="跳到上一个回答" title="上一个回答">↑</button>
+              <button id="nextAnswerBtn" class="icon-btn" type="button" aria-label="跳到下一个回答" title="下一个回答">↓</button>
+            </div>
+            <button id="collapseChatBtn" class="icon-btn panel-toggle" type="button" aria-label="收起右侧栏" title="收起右侧栏">&gt;</button>
+          </div>
         </div>
       </div>
       <div id="workStatus" class="work-status hidden">
@@ -161,7 +167,10 @@
         <div id="sendPreview" class="send-preview hidden" aria-label="发送前预览"></div>
         <div id="queuePanel" class="queue-panel hidden" aria-label="发送队列">
           <div class="queue-head">
-            <strong>发送队列</strong>
+            <button id="queueToggleBtn" class="queue-toggle-btn" type="button" aria-expanded="false">
+              <strong>发送队列</strong>
+              <span id="queueToggleLabel">展开</span>
+            </button>
             <span id="queueCount">0</span>
           </div>
           <div id="taskList" class="task-list"></div>
