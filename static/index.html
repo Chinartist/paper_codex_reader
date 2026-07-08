@@ -52,6 +52,10 @@
       <header class="reader-toolbar">
         <div class="reader-title">
           <strong id="activePaperTitle" tabindex="0" role="button" aria-label="重命名当前论文" title="双击重命名论文">未选择论文</strong>
+          <div id="recentPaperSwitcher" class="recent-paper-switcher">
+            <button id="recentPaperTrigger" class="recent-paper-trigger" type="button" aria-label="最近打开" title="最近打开" aria-haspopup="menu" aria-expanded="false"></button>
+            <div id="recentPaperMenu" class="recent-paper-menu" role="menu"></div>
+          </div>
           <span id="activeConversationTitle"></span>
         </div>
         <div class="toolbar-actions">
@@ -65,12 +69,6 @@
         </div>
       </header>
       <div class="pdf-stage">
-        <div id="recentPaperSwitcher" class="recent-paper-switcher">
-          <button id="recentPaperTrigger" class="recent-paper-trigger" type="button" aria-haspopup="menu" aria-expanded="false">
-            最近
-          </button>
-          <div id="recentPaperMenu" class="recent-paper-menu" role="menu"></div>
-        </div>
         <div id="outlineSwitcher" class="outline-switcher hidden">
           <button id="outlineTrigger" class="outline-trigger" type="button" aria-haspopup="menu" aria-expanded="false">
             目录

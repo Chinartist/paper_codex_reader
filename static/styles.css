@@ -1056,12 +1056,16 @@ body.sidebar-sorting * {
 
 .reader-title {
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .reader-title strong {
   display: block;
-  width: fit-content;
-  max-width: 100%;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(520px, 52vw);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1072,6 +1076,14 @@ body.sidebar-sorting * {
   margin-left: -4px;
   padding: 3px 4px;
   transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+
+.reader-title #activeConversationTitle {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reader-title strong:hover {
@@ -1153,22 +1165,20 @@ body.sidebar-sorting * {
 }
 
 .recent-paper-switcher {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  z-index: 20;
-  max-width: min(360px, calc(100% - 28px));
+  position: relative;
+  z-index: 30;
+  display: inline-flex;
+  flex: 0 0 auto;
 }
 
 .outline-switcher {
   position: absolute;
   top: 14px;
-  left: 86px;
+  left: 14px;
   z-index: 20;
-  max-width: min(420px, calc(100% - 100px));
+  max-width: min(420px, calc(100% - 28px));
 }
 
-.recent-paper-trigger,
 .outline-trigger {
   min-height: 34px;
   border: 1px solid rgba(148, 163, 184, 0.58);
@@ -1182,7 +1192,6 @@ body.sidebar-sorting * {
   padding: 0 12px;
 }
 
-.recent-paper-trigger::after,
 .outline-trigger::after {
   content: "";
   display: inline-block;
@@ -1194,18 +1203,67 @@ body.sidebar-sorting * {
   transform: translateY(-2px) rotate(45deg);
 }
 
-.recent-paper-trigger:hover:not(:disabled),
-.recent-paper-switcher:focus-within .recent-paper-trigger,
 .outline-trigger:hover:not(:disabled),
 .outline-switcher:focus-within .outline-trigger {
   background: white;
   border-color: rgba(100, 116, 139, 0.55);
 }
 
-.recent-paper-trigger:disabled,
 .outline-trigger:disabled {
   cursor: default;
   opacity: 0.72;
+}
+
+.recent-paper-trigger {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.68);
+  color: #475569;
+  padding: 0;
+  box-shadow: none;
+}
+
+.recent-paper-trigger::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 8px;
+  width: 14px;
+  height: 14px;
+  border: 1.8px solid currentColor;
+  border-radius: 50%;
+}
+
+.recent-paper-trigger::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 11px;
+  width: 5px;
+  height: 7px;
+  border-left: 1.8px solid currentColor;
+  border-bottom: 1.8px solid currentColor;
+  transform-origin: left bottom;
+  transform: rotate(0deg);
+}
+
+.recent-paper-trigger:hover:not(:disabled),
+.recent-paper-switcher:focus-within .recent-paper-trigger,
+.recent-paper-switcher.open .recent-paper-trigger {
+  background: #ffffff;
+  border-color: rgba(100, 116, 139, 0.55);
+  color: #1d4ed8;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.recent-paper-trigger:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .recent-paper-menu,
@@ -1232,6 +1290,7 @@ body.sidebar-sorting * {
 
 .recent-paper-switcher:hover .recent-paper-menu,
 .recent-paper-switcher:focus-within .recent-paper-menu,
+.recent-paper-switcher.open .recent-paper-menu,
 .outline-switcher:hover .outline-menu,
 .outline-switcher:focus-within .outline-menu,
 .outline-switcher.open .outline-menu {

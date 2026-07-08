@@ -691,6 +691,7 @@ function renderRecentPapers() {
   const menu = $("recentPaperMenu");
   const trigger = $("recentPaperTrigger");
   if (!menu || !trigger) return;
+  $("recentPaperSwitcher")?.classList.remove("open");
   const recent = getRecentOpenedPapers();
   trigger.disabled = !recent.length;
   trigger.setAttribute("aria-expanded", "false");
@@ -4198,11 +4199,21 @@ function bindEvents() {
     $("recentPaperTrigger").setAttribute("aria-expanded", "true");
   });
   $("recentPaperSwitcher").addEventListener("mouseleave", () => {
-    $("recentPaperTrigger").setAttribute("aria-expanded", "false");
+    if (!$("recentPaperSwitcher").classList.contains("open")) {
+      $("recentPaperTrigger").setAttribute("aria-expanded", "false");
+    }
+  });
+  $("recentPaperTrigger").addEventListener("click", (event) => {
+    event.stopPropagation();
+    const open = !$("recentPaperSwitcher").classList.contains("open");
+    $("recentPaperSwitcher").classList.toggle("open", open);
+    $("recentPaperTrigger").setAttribute("aria-expanded", String(open));
   });
   $("recentPaperMenu").addEventListener("click", (event) => {
     const item = event.target.closest(".recent-paper-item");
     if (!item?.dataset.paperId) return;
+    $("recentPaperSwitcher").classList.remove("open");
+    $("recentPaperTrigger").setAttribute("aria-expanded", "false");
     selectPaper(item.dataset.paperId).catch((error) => toast(error.message, 7000));
   });
   $("outlineSwitcher").addEventListener("mouseenter", () => {
@@ -4227,6 +4238,10 @@ function bindEvents() {
     openOutlineItem(item.dataset.outlineIndex);
   });
   document.addEventListener("click", (event) => {
+    if (!event.target.closest("#recentPaperSwitcher")) {
+      $("recentPaperSwitcher").classList.remove("open");
+      $("recentPaperTrigger").setAttribute("aria-expanded", "false");
+    }
     if (event.target.closest("#outlineSwitcher")) return;
     $("outlineSwitcher").classList.remove("open");
     $("outlineTrigger").setAttribute("aria-expanded", "false");
