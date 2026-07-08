@@ -78,6 +78,8 @@ const state = {
   draggingConversationId: null,
   sidebarDrag: null,
   suppressSidebarClickUntil: 0,
+  mermaidPreviewUrls: [],
+  mermaidPreviewToken: 0,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -1884,17 +1886,15 @@ function enhanceMermaidBlocks(nodes) {
     const block = node.closest(".mermaid-block");
     if (!block || block.dataset.enhanced === "true" || !block.querySelector("svg")) continue;
     block.dataset.enhanced = "true";
-    const toolbar = document.createElement("div");
-    toolbar.className = "mermaid-toolbar";
-    toolbar.innerHTML = `
-      <button class="mermaid-preview-btn" type="button" aria-label="预览图表" title="预览图表">预览</button>
-      <button class="mermaid-download-svg-btn" type="button" aria-label="下载 SVG" title="下载 SVG">SVG</button>
-      <button class="mermaid-download-png-btn" type="button" aria-label="下载 PNG" title="下载 PNG">PNG</button>
-    `;
-    block.prepend(toolbar);
-    toolbar.querySelector(".mermaid-preview-btn").addEventListener("click", () => previewMermaidBlock(block));
-    toolbar.querySelector(".mermaid-download-svg-btn").addEventListener("click", () => downloadMermaidSvg(block));
-    toolbar.querySelector(".mermaid-download-png-btn").addEventListener("click", () => downloadMermaidPng(block));
+    block.classList.add("mermaid-interactive");
+    block.tabIndex = 0;
+    block.title = "双击预览 Mermaid 图表";
+    block.addEventListener("dblclick", () => openMermaidPngPreview(block));
+    block.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openMermaidPngPreview(block);
+    });
   }
 }
 
@@ -1909,17 +1909,103 @@ function serializedMermaidSvg(svg) {
   return new XMLSerializer().serializeToString(clone);
 }
 
-function previewMermaidBlock(block) {
+async function openMermaidPngPreview(block) {
   const svg = mermaidSvgForBlock(block);
   if (!svg) {
     toast("图表还没有渲染完成");
     return;
   }
-  setMermaidPreviewHeader("图表预览", "滚动查看完整 Mermaid 图表。");
+  revokeMermaidPreviewUrls();
+  const previewToken = ++state.mermaidPreviewToken;
+  setMermaidPreviewHeader("PNG 预览", "可在这里下载 SVG 或 PNG。");
   clearMermaidPreviewActions();
   const body = $("mermaidPreviewBody");
-  body.replaceChildren(svg.cloneNode(true));
-  $("mermaidPreviewDialog").showModal();
+  body.replaceChildren(mermaidPreviewLoading());
+  const dialog = $("mermaidPreviewDialog");
+  if (!dialog.open) dialog.showModal();
+
+  const svgBlob = new Blob([serializedMermaidSvg(svg)], { type: "image/svg+xml;charset=utf-8" });
+  const svgUrl = URL.createObjectURL(svgBlob);
+  try {
+    const pngBlob = await mermaidSvgToPngBlob(svg);
+    const pngUrl = URL.createObjectURL(pngBlob);
+    if (previewToken !== state.mermaidPreviewToken || !dialog.open) {
+      URL.revokeObjectURL(svgUrl);
+      URL.revokeObjectURL(pngUrl);
+      return;
+    }
+    setMermaidPreviewUrls([svgUrl, pngUrl]);
+    showMermaidPreviewImage(pngUrl, {
+      svgName: mermaidDownloadName("svg"),
+      pngName: mermaidDownloadName("png"),
+      svgUrl,
+      pngUrl,
+    });
+  } catch (error) {
+    if (previewToken !== state.mermaidPreviewToken || !dialog.open) {
+      URL.revokeObjectURL(svgUrl);
+      return;
+    }
+    setMermaidPreviewUrls([svgUrl]);
+    showMermaidPreviewFallback(svg.cloneNode(true), {
+      svgName: mermaidDownloadName("svg"),
+      svgUrl,
+    });
+    toast(error.message || "PNG 生成失败，请先下载 SVG", 7000);
+  }
+}
+
+function mermaidPreviewLoading() {
+  const loading = document.createElement("div");
+  loading.className = "mermaid-preview-loading";
+  loading.textContent = "正在生成 PNG 预览...";
+  return loading;
+}
+
+function setMermaidPreviewUrls(urls) {
+  revokeMermaidPreviewUrls();
+  state.mermaidPreviewUrls = urls;
+}
+
+function revokeMermaidPreviewUrls() {
+  for (const url of state.mermaidPreviewUrls) {
+    URL.revokeObjectURL(url);
+  }
+  state.mermaidPreviewUrls = [];
+}
+
+function makeMermaidPreviewDownload(label, url, filename) {
+  const link = document.createElement("a");
+  link.className = "mermaid-preview-download";
+  link.href = url;
+  link.download = filename;
+  link.textContent = label;
+  return link;
+}
+
+function showMermaidPreviewActions(links) {
+  const actions = $("mermaidPreviewActions");
+  actions.classList.remove("hidden");
+  actions.replaceChildren(...links);
+}
+
+function showMermaidPreviewImage(url, { svgName, pngName, svgUrl, pngUrl }) {
+  showMermaidPreviewActions([
+    makeMermaidPreviewDownload("下载 SVG", svgUrl, svgName),
+    makeMermaidPreviewDownload("下载 PNG", pngUrl, pngName),
+  ]);
+
+  const image = document.createElement("img");
+  image.className = "mermaid-preview-image";
+  image.alt = "Mermaid PNG 预览";
+  image.src = url;
+  $("mermaidPreviewBody").replaceChildren(image);
+}
+
+function showMermaidPreviewFallback(svg, { svgName, svgUrl }) {
+  setMermaidPreviewHeader("图表预览", "PNG 生成失败，可先下载 SVG。");
+  showMermaidPreviewActions([makeMermaidPreviewDownload("下载 SVG", svgUrl, svgName)]);
+  $("mermaidPreviewBody").replaceChildren(svg);
 }
 
 function setMermaidPreviewHeader(title, hint) {
@@ -1933,73 +2019,21 @@ function clearMermaidPreviewActions() {
   actions.replaceChildren();
 }
 
-function showMermaidPngPreview(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  setMermaidPreviewHeader("PNG 预览", "图片已生成，点击下载按钮保存 PNG。");
-  const actions = $("mermaidPreviewActions");
-  actions.classList.remove("hidden");
-  actions.replaceChildren();
-  const link = document.createElement("a");
-  link.className = "mermaid-preview-download";
-  link.href = url;
-  link.download = filename;
-  link.textContent = "下载 PNG";
-  actions.appendChild(link);
+function closeMermaidPreview() {
+  $("mermaidPreviewDialog").close();
+}
 
-  const image = document.createElement("img");
-  image.className = "mermaid-preview-image";
-  image.alt = "Mermaid PNG 预览";
-  image.src = url;
-  const body = $("mermaidPreviewBody");
-  body.replaceChildren(image);
-  $("mermaidPreviewDialog").showModal();
-  $("mermaidPreviewDialog").addEventListener("close", () => URL.revokeObjectURL(url), { once: true });
+function resetMermaidPreview() {
+  state.mermaidPreviewToken += 1;
+  revokeMermaidPreviewUrls();
+  clearMermaidPreviewActions();
+  $("mermaidPreviewBody").replaceChildren();
 }
 
 function mermaidDownloadName(extension) {
   const title = state.activeConversation?.title || state.activePaper?.title || "mermaid-diagram";
   const safeTitle = title.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, "-").slice(0, 80) || "mermaid-diagram";
   return `${safeTitle}.${extension}`;
-}
-
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.rel = "noopener";
-  link.className = "generated-download-link";
-  document.body.appendChild(link);
-  link.click();
-  toast(`已生成下载：${filename}`);
-  window.setTimeout(() => {
-    link.remove();
-    URL.revokeObjectURL(url);
-  }, 30000);
-}
-
-function downloadMermaidSvg(block) {
-  const svg = mermaidSvgForBlock(block);
-  if (!svg) {
-    toast("图表还没有渲染完成");
-    return;
-  }
-  const blob = new Blob([serializedMermaidSvg(svg)], { type: "image/svg+xml;charset=utf-8" });
-  downloadBlob(blob, mermaidDownloadName("svg"));
-}
-
-async function downloadMermaidPng(block) {
-  const svg = mermaidSvgForBlock(block);
-  if (!svg) {
-    toast("图表还没有渲染完成");
-    return;
-  }
-  try {
-    const blob = await mermaidSvgToPngBlob(svg);
-    showMermaidPngPreview(blob, mermaidDownloadName("png"));
-  } catch (error) {
-    toast(error.message || "PNG 下载失败", 7000);
-  }
 }
 
 function mermaidSvgSize(svg) {
@@ -4132,7 +4166,8 @@ function bindEvents() {
   $("codexLoginBtn").addEventListener("click", startCodexLogin);
   $("codexLogoutBtn").addEventListener("click", logoutCodex);
   $("settingsBtn").addEventListener("click", () => $("settingsDialog").showModal());
-  $("closeMermaidPreviewBtn").addEventListener("click", () => $("mermaidPreviewDialog").close());
+  $("closeMermaidPreviewBtn").addEventListener("click", closeMermaidPreview);
+  $("mermaidPreviewDialog").addEventListener("close", resetMermaidPreview);
   $("saveConversationTitleBtn").addEventListener("click", saveConversationTitle);
   $("savePaperTitleBtn").addEventListener("click", savePaperTitle);
   $("activePaperTitle").addEventListener("dblclick", openActivePaperRename);

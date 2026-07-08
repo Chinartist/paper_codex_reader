@@ -2040,42 +2040,18 @@ body.resizing-chat {
   background: #ffffff;
   padding: 12px;
   max-width: 100%;
-  display: grid;
-  gap: 10px;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
-.mermaid-toolbar {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: max-content;
-  padding: 2px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 999px;
-  background: rgba(248, 250, 252, 0.92);
-  backdrop-filter: blur(10px);
+.mermaid-block.mermaid-interactive {
+  cursor: zoom-in;
 }
 
-.mermaid-toolbar button {
-  min-height: 28px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: #475569;
-  padding: 0 10px;
-  box-shadow: none;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.mermaid-toolbar button:hover:not(:disabled) {
-  background: #eaf1ff;
-  color: #1d4ed8;
-  box-shadow: none;
-  transform: none;
+.mermaid-block.mermaid-interactive:hover,
+.mermaid-block.mermaid-interactive:focus-visible {
+  border-color: rgba(37, 99, 235, 0.34);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+  outline: none;
 }
 
 .markdown-body .mermaid {
@@ -2146,6 +2122,15 @@ body.resizing-chat {
 
 .mermaid-preview-download:hover {
   background: #1e40af;
+}
+
+.mermaid-preview-loading {
+  display: grid;
+  min-height: 240px;
+  place-items: center;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .mermaid-preview-body {

@@ -142,7 +142,7 @@ file:///C:/Users/me/Documents/paper.pdf
 - For selected passages, the default prompt asks Codex to translate first and then analyze briefly.
 - Add multiple selected passages to one message before sending.
 - Assistant replies render common Markdown such as lists, quotes, inline code, code blocks, and fenced `mermaid` diagrams. Plain code blocks that start with common Mermaid declarations such as `flowchart` or `sequenceDiagram` are auto-detected too.
-- Rendered Mermaid diagrams can be opened in a larger preview and downloaded as SVG or PNG.
+- Double-click a rendered Mermaid diagram to open a PNG preview. The preview dialog provides SVG and PNG download actions.
 
 ### Conversations And Tasks
 
