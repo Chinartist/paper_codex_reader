@@ -87,7 +87,7 @@ $env:PAPER_CODEX_READER_HOME="D:\PaperCodexReaderData"
 
 - 本地 PDF 路径
 - 直接 PDF 链接
-- 文件选择器选择的 PDF 文件
+- 文件选择器选择的一个或多个 PDF 文件；选中文件后会直接导入
 
 批量导入时，可以在文件选择器里一次选择多个 PDF，或在来源输入框里一行粘贴一个 PDF 链接/绝对路径。
 

@@ -866,8 +866,9 @@ async function deletePaper(paperId) {
   }
 }
 
-async function importPaper() {
-  const sources = parsePaperSources($("paperSourceInput").value);
+async function importPaper(options = {}) {
+  const filesOnly = options.filesOnly === true;
+  const sources = filesOnly ? [] : parsePaperSources($("paperSourceInput").value);
   const title = $("paperTitleInput").value.trim();
   const files = [...state.selectedFiles];
   const items = [
@@ -875,7 +876,7 @@ async function importPaper() {
     ...sources.map((source) => ({ type: "source", source, label: source })),
   ];
   if (!items.length) {
-    toast("请选择一个或多个 PDF，或输入 PDF 本地路径/链接");
+    toast(filesOnly ? "请选择一个或多个 PDF" : "请选择一个或多个 PDF，或输入 PDF 本地路径/链接");
     return;
   }
   const batch = items.length > 1;
@@ -3594,6 +3595,10 @@ function bindEvents() {
   $("paperFileInput").addEventListener("change", () => {
     state.selectedFiles = [...($("paperFileInput").files || [])];
     updateChosenPaperFiles();
+    $("paperFileInput").value = "";
+    if (state.selectedFiles.length) {
+      importPaper({ filesOnly: true });
+    }
   });
   $("importPaperBtn").addEventListener("click", importPaper);
   $("initializeBtn").addEventListener("click", initializeConversation);

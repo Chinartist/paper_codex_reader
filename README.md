@@ -87,7 +87,7 @@ You can import:
 
 - A local PDF path
 - A direct PDF URL
-- A PDF file selected from the file picker
+- One or more PDF files selected from the file picker; selected files import immediately
 
 For batch import, select multiple PDFs in the file picker or paste multiple PDF URLs/absolute paths with one item per line.
 
