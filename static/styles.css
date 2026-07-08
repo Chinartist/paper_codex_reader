@@ -1001,11 +1001,28 @@ body.sidebar-sorting * {
 
 .reader-title strong {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 15px;
   font-weight: 760;
+  border-radius: 7px;
+  cursor: pointer;
+  margin-left: -4px;
+  padding: 3px 4px;
+  transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+
+.reader-title strong:hover {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.reader-title strong:focus-visible {
+  outline: none;
+  background: rgba(37, 99, 235, 0.1);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.24);
 }
 
 .toolbar-actions {

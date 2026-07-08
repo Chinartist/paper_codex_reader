@@ -789,6 +789,14 @@ function openRenamePaper(paperId) {
   $("renamePaperInput").select();
 }
 
+function openActivePaperRename() {
+  if (!state.activePaper) {
+    toast("请先打开一篇论文");
+    return;
+  }
+  openRenamePaper(state.activePaper.id);
+}
+
 async function savePaperTitle() {
   const paperId = state.renamingPaperId;
   const title = $("renamePaperInput").value.trim();
@@ -3653,6 +3661,12 @@ function bindEvents() {
   $("settingsBtn").addEventListener("click", () => $("settingsDialog").showModal());
   $("saveConversationTitleBtn").addEventListener("click", saveConversationTitle);
   $("savePaperTitleBtn").addEventListener("click", savePaperTitle);
+  $("activePaperTitle").addEventListener("dblclick", openActivePaperRename);
+  $("activePaperTitle").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== "F2") return;
+    event.preventDefault();
+    openActivePaperRename();
+  });
   $("renameConversationInput").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
