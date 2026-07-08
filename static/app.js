@@ -78,6 +78,7 @@ const state = {
   draggingConversationId: null,
   sidebarDrag: null,
   suppressSidebarClickUntil: 0,
+  mermaidRenderQueue: Promise.resolve(),
   mermaidPreviewUrls: [],
   mermaidPreviewToken: 0,
   mermaidPreviewZoom: 1,
@@ -1871,15 +1872,42 @@ function renderMermaidDiagrams(root = document) {
   if (!window.mermaid) return;
   const nodes = [...root.querySelectorAll(".mermaid:not([data-processed])")];
   if (!nodes.length) return;
-  window.mermaid.run({ nodes })
-    .then(() => enhanceMermaidBlocks(nodes))
-    .catch((error) => {
+  state.mermaidRenderQueue = state.mermaidRenderQueue
+    .then(async () => {
       for (const node of nodes) {
-        node.classList.add("mermaid-error");
-        node.dataset.processed = "true";
+        if (!node.isConnected || node.dataset.processed === "true") continue;
+        await renderMermaidNode(node);
       }
-      console.warn("Mermaid rendering failed", error);
-    });
+    })
+    .catch((error) => console.warn("Mermaid rendering failed", error));
+}
+
+async function renderMermaidNode(node) {
+  const source = node.textContent || "";
+  const renderId = `mermaid-${makeId().replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+  try {
+    const result = await window.mermaid.render(renderId, source);
+    node.innerHTML = result.svg;
+    node.dataset.processed = "true";
+    normalizeMermaidSvg(node.closest(".mermaid-block"));
+    enhanceMermaidBlocks([node]);
+  } catch (error) {
+    node.textContent = source;
+    node.classList.add("mermaid-error");
+    node.dataset.processed = "true";
+    console.warn("Mermaid render failed", error);
+  }
+}
+
+function normalizeMermaidSvg(block) {
+  const svg = mermaidSvgForBlock(block);
+  if (!svg) return;
+  const { width, height } = mermaidSvgSize(svg);
+  svg.setAttribute("width", String(Math.ceil(width)));
+  svg.setAttribute("height", String(Math.ceil(height)));
+  svg.style.width = `${Math.ceil(width)}px`;
+  svg.style.height = `${Math.ceil(height)}px`;
+  svg.style.maxWidth = "none";
 }
 
 function enhanceMermaidBlocks(nodes) {
