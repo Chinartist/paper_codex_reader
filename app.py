@@ -820,7 +820,7 @@ class Store:
                 select c.*, p.title as paper_title
                 from conversations c
                 left join papers p on p.id = c.paper_id
-                order by c.updated_at desc
+                order by c.created_at desc, c.id asc
                 """
             ).fetchall()
         conversations = []
@@ -925,13 +925,13 @@ class Store:
         with self.connect() as con:
             if initialized:
                 con.execute(
-                    "update conversations set codex_session_id = ?, initialized_at = ?, updated_at = ? where id = ?",
-                    (session_id, stamp, stamp, conv_id),
+                    "update conversations set codex_session_id = ?, initialized_at = ? where id = ?",
+                    (session_id, stamp, conv_id),
                 )
             else:
                 con.execute(
-                    "update conversations set codex_session_id = ?, updated_at = ? where id = ?",
-                    (session_id, stamp, conv_id),
+                    "update conversations set codex_session_id = ? where id = ?",
+                    (session_id, conv_id),
                 )
 
     def add_message(

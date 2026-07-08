@@ -1192,9 +1192,16 @@ function conversationGroups() {
 }
 
 function compareOptionalOrder(orderA, fallbackA, orderB, fallbackB) {
-  const a = Number.isFinite(Number(orderA)) ? Number(orderA) : 1000000 + Number(fallbackA || 0);
-  const b = Number.isFinite(Number(orderB)) ? Number(orderB) : 1000000 + Number(fallbackB || 0);
-  return a - b;
+  const hasA = Number.isFinite(Number(orderA));
+  const hasB = Number.isFinite(Number(orderB));
+  const fallback = Number(fallbackA || 0) - Number(fallbackB || 0);
+  if (hasA && hasB) {
+    return Number(orderA) - Number(orderB) || fallback;
+  }
+  if (hasA !== hasB) {
+    return hasA ? -1 : 1;
+  }
+  return fallback;
 }
 
 function renderConversationItem(conv) {
