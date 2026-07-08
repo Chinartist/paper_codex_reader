@@ -358,11 +358,12 @@
       <div class="mermaid-preview-shell">
         <div class="dialog-head">
           <div>
-            <h2>图表预览</h2>
-            <p>滚动查看完整 Mermaid 图表。</p>
+            <h2 id="mermaidPreviewTitle">图表预览</h2>
+            <p id="mermaidPreviewHint">滚动查看完整 Mermaid 图表。</p>
           </div>
           <button id="closeMermaidPreviewBtn" class="icon-btn dialog-close" type="button" aria-label="关闭" title="关闭">×</button>
         </div>
+        <div id="mermaidPreviewActions" class="mermaid-preview-actions hidden"></div>
         <div id="mermaidPreviewBody" class="mermaid-preview-body"></div>
       </div>
     </dialog>

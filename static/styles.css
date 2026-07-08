@@ -2117,8 +2117,35 @@ body.resizing-chat {
 
 .mermaid-preview-shell {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   max-height: calc(100dvh - 38px);
+}
+
+.mermaid-preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  background: #ffffff;
+}
+
+.mermaid-preview-download {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  border-radius: 999px;
+  background: #1d4ed8;
+  color: #ffffff;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 760;
+  text-decoration: none;
+  box-shadow: 0 10px 20px rgba(29, 78, 216, 0.18);
+}
+
+.mermaid-preview-download:hover {
+  background: #1e40af;
 }
 
 .mermaid-preview-body {
@@ -2132,6 +2159,17 @@ body.resizing-chat {
   display: block;
   width: max-content;
   max-width: none;
+  min-width: min(760px, 100%);
+  margin: 0 auto;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+}
+
+.mermaid-preview-image {
+  display: block;
+  max-width: none;
+  width: max-content;
   min-width: min(760px, 100%);
   margin: 0 auto;
   border-radius: 12px;

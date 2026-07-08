@@ -1843,7 +1843,7 @@ function setupMermaid() {
       securityLevel: "strict",
       theme: "base",
       flowchart: {
-        htmlLabels: true,
+        htmlLabels: false,
         curve: "basis",
       },
       themeVariables: {
@@ -1915,9 +1915,45 @@ function previewMermaidBlock(block) {
     toast("图表还没有渲染完成");
     return;
   }
+  setMermaidPreviewHeader("图表预览", "滚动查看完整 Mermaid 图表。");
+  clearMermaidPreviewActions();
   const body = $("mermaidPreviewBody");
   body.replaceChildren(svg.cloneNode(true));
   $("mermaidPreviewDialog").showModal();
+}
+
+function setMermaidPreviewHeader(title, hint) {
+  $("mermaidPreviewTitle").textContent = title;
+  $("mermaidPreviewHint").textContent = hint;
+}
+
+function clearMermaidPreviewActions() {
+  const actions = $("mermaidPreviewActions");
+  actions.classList.add("hidden");
+  actions.replaceChildren();
+}
+
+function showMermaidPngPreview(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  setMermaidPreviewHeader("PNG 预览", "图片已生成，点击下载按钮保存 PNG。");
+  const actions = $("mermaidPreviewActions");
+  actions.classList.remove("hidden");
+  actions.replaceChildren();
+  const link = document.createElement("a");
+  link.className = "mermaid-preview-download";
+  link.href = url;
+  link.download = filename;
+  link.textContent = "下载 PNG";
+  actions.appendChild(link);
+
+  const image = document.createElement("img");
+  image.className = "mermaid-preview-image";
+  image.alt = "Mermaid PNG 预览";
+  image.src = url;
+  const body = $("mermaidPreviewBody");
+  body.replaceChildren(image);
+  $("mermaidPreviewDialog").showModal();
+  $("mermaidPreviewDialog").addEventListener("close", () => URL.revokeObjectURL(url), { once: true });
 }
 
 function mermaidDownloadName(extension) {
@@ -1960,7 +1996,7 @@ async function downloadMermaidPng(block) {
   }
   try {
     const blob = await mermaidSvgToPngBlob(svg);
-    downloadBlob(blob, mermaidDownloadName("png"));
+    showMermaidPngPreview(blob, mermaidDownloadName("png"));
   } catch (error) {
     toast(error.message || "PNG 下载失败", 7000);
   }
@@ -1980,10 +2016,14 @@ function mermaidSvgSize(svg) {
 
 function mermaidSvgToPngBlob(svg) {
   return new Promise((resolve, reject) => {
-    const source = serializedMermaidSvg(svg);
+    const source = `<?xml version="1.0" encoding="UTF-8"?>\n${serializedMermaidSvg(svg)}`;
     const image = new Image();
-    const url = URL.createObjectURL(new Blob([source], { type: "image/svg+xml;charset=utf-8" }));
+    const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(source)}`;
+    const timer = window.setTimeout(() => {
+      reject(new Error("PNG 生成超时，请先下载 SVG"));
+    }, 8000);
     image.onload = () => {
+      window.clearTimeout(timer);
       try {
         const { width, height } = mermaidSvgSize(svg);
         const scale = Math.min(3, Math.max(1, window.devicePixelRatio || 1));
@@ -1996,7 +2036,6 @@ function mermaidSvgToPngBlob(svg) {
         context.setTransform(scale, 0, 0, scale, 0, 0);
         context.drawImage(image, 0, 0, width, height);
         canvas.toBlob((blob) => {
-          URL.revokeObjectURL(url);
           if (blob) {
             resolve(blob);
           } else {
@@ -2004,12 +2043,11 @@ function mermaidSvgToPngBlob(svg) {
           }
         }, "image/png");
       } catch (error) {
-        URL.revokeObjectURL(url);
         reject(error);
       }
     };
     image.onerror = () => {
-      URL.revokeObjectURL(url);
+      window.clearTimeout(timer);
       reject(new Error("PNG 下载失败"));
     };
     image.src = url;
@@ -2018,8 +2056,8 @@ function mermaidSvgToPngBlob(svg) {
 
 function markMermaidRenderError(root = document) {
   for (const node of root.querySelectorAll(".mermaid:not([data-processed])")) {
-      node.classList.add("mermaid-error");
-      node.dataset.processed = "true";
+    node.classList.add("mermaid-error");
+    node.dataset.processed = "true";
   }
 }
 
