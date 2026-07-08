@@ -959,7 +959,8 @@ function renderConversations() {
   if (state.draggingFolderKey || state.draggingConversationId || state.sidebarDrag) return;
   const list = $("conversationsList");
   list.innerHTML = "";
-  if (!state.conversations.length) {
+  const groups = conversationGroups();
+  if (!groups.length) {
     list.innerHTML = `
       <div class="list-empty">
         还没有对话。直接在右侧发送问题会自动创建。
@@ -967,7 +968,7 @@ function renderConversations() {
     `;
     return;
   }
-  for (const group of conversationGroups()) {
+  for (const group of groups) {
     const isCollapsed = Boolean(state.collapsedConversationGroups[group.key]);
     const hasActiveConversation = group.conversations.some((conv) => conv.id === state.activeConversation?.id);
     const hasRunningTask = group.conversations.some((conv) => activeTaskForConversation(conv.id));
@@ -1005,6 +1006,12 @@ function renderConversations() {
     for (const conv of group.conversations) {
       children.appendChild(renderConversationItem(conv));
     }
+    if (!group.conversations.length) {
+      const empty = document.createElement("div");
+      empty.className = "folder-empty";
+      empty.textContent = "还没有对话";
+      children.appendChild(empty);
+    }
     list.appendChild(section);
   }
 }
@@ -1012,8 +1019,22 @@ function renderConversations() {
 function conversationGroups() {
   const groups = [];
   const byKey = new Map();
+  if (state.activePaper) {
+    const key = `paper:${state.activePaper.id}`;
+    const group = {
+      key,
+      paperId: state.activePaper.id,
+      title: state.activePaper.title,
+      conversations: [],
+      fallbackOrder: -1,
+      order: null,
+    };
+    groups.push(group);
+    byKey.set(key, group);
+  }
   for (const [index, conv] of state.conversations.entries()) {
     const key = conv.folder_key || (conv.paper_id ? `paper:${conv.paper_id}` : "paper:none");
+    const order = Number.isFinite(Number(conv.folder_order)) ? Number(conv.folder_order) : null;
     if (!byKey.has(key)) {
       const group = {
         key,
@@ -1021,10 +1042,15 @@ function conversationGroups() {
         title: conv.paper_title || (conv.paper_id ? "已删除论文" : "空对话"),
         conversations: [],
         fallbackOrder: index,
-        order: Number.isFinite(Number(conv.folder_order)) ? Number(conv.folder_order) : null,
+        order,
       };
       groups.push(group);
       byKey.set(key, group);
+    } else {
+      const group = byKey.get(key);
+      group.fallbackOrder = Math.min(group.fallbackOrder, index);
+      if (conv.paper_title) group.title = conv.paper_title;
+      if (order !== null) group.order = order;
     }
     byKey.get(key).conversations.push({ ...conv, fallbackOrder: index });
   }
