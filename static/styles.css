@@ -2099,16 +2099,69 @@ body.resizing-chat {
 
 .mermaid-preview-actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
   padding: 10px 18px;
   border-bottom: 1px solid var(--border);
   background: #ffffff;
 }
 
+.mermaid-preview-downloads,
+.mermaid-preview-zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mermaid-preview-zoom-controls {
+  min-height: 38px;
+  border: 1px solid rgba(203, 213, 225, 0.78);
+  border-radius: 999px;
+  background: #f8fafc;
+  padding: 3px;
+}
+
+.mermaid-preview-zoom-btn {
+  min-width: 34px;
+  min-height: 30px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #334155;
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.mermaid-preview-zoom-reset {
+  min-width: 56px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.mermaid-preview-zoom-btn:hover:not(:disabled),
+.mermaid-preview-zoom-btn:focus-visible {
+  background: #ffffff;
+  color: #1d4ed8;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  transform: none;
+}
+
+.mermaid-preview-zoom-value {
+  min-width: 48px;
+  padding: 0 8px 0 2px;
+  color: #64748b;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .mermaid-preview-download {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 34px;
   border-radius: 999px;
   background: #1d4ed8;
@@ -2142,9 +2195,7 @@ body.resizing-chat {
 
 .mermaid-preview-body svg {
   display: block;
-  width: max-content;
   max-width: none;
-  min-width: min(760px, 100%);
   margin: 0 auto;
   border-radius: 12px;
   background: #ffffff;
@@ -2154,12 +2205,25 @@ body.resizing-chat {
 .mermaid-preview-image {
   display: block;
   max-width: none;
-  width: max-content;
-  min-width: min(760px, 100%);
   margin: 0 auto;
   border-radius: 12px;
   background: #ffffff;
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+}
+
+@media (max-width: 720px) {
+  .mermaid-preview-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mermaid-preview-downloads {
+    justify-content: flex-end;
+  }
+
+  .mermaid-preview-zoom-controls {
+    justify-content: space-between;
+  }
 }
 
 .selection-box {

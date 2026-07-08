@@ -80,6 +80,7 @@ const state = {
   suppressSidebarClickUntil: 0,
   mermaidPreviewUrls: [],
   mermaidPreviewToken: 0,
+  mermaidPreviewZoom: 1,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -1917,7 +1918,7 @@ async function openMermaidPngPreview(block) {
   }
   revokeMermaidPreviewUrls();
   const previewToken = ++state.mermaidPreviewToken;
-  setMermaidPreviewHeader("PNG 预览", "可在这里下载 SVG 或 PNG。");
+  setMermaidPreviewHeader("PNG 预览", "可缩放预览，也可下载 SVG 或 PNG。");
   clearMermaidPreviewActions();
   const body = $("mermaidPreviewBody");
   body.replaceChildren(mermaidPreviewLoading());
@@ -1986,7 +1987,30 @@ function makeMermaidPreviewDownload(label, url, filename) {
 function showMermaidPreviewActions(links) {
   const actions = $("mermaidPreviewActions");
   actions.classList.remove("hidden");
-  actions.replaceChildren(...links);
+  const downloads = document.createElement("div");
+  downloads.className = "mermaid-preview-downloads";
+  downloads.replaceChildren(...links);
+  actions.replaceChildren(makeMermaidPreviewZoomControls(), downloads);
+}
+
+function makeMermaidPreviewZoomControls() {
+  const controls = document.createElement("div");
+  controls.className = "mermaid-preview-zoom-controls";
+  controls.setAttribute("aria-label", "图表预览缩放");
+  controls.innerHTML = `
+    <button type="button" class="mermaid-preview-zoom-btn" data-zoom-action="out" aria-label="缩小预览" title="缩小">-</button>
+    <button type="button" class="mermaid-preview-zoom-btn mermaid-preview-zoom-reset" data-zoom-action="reset" aria-label="恢复 100%" title="恢复 100%">100%</button>
+    <button type="button" class="mermaid-preview-zoom-btn" data-zoom-action="in" aria-label="放大预览" title="放大">+</button>
+    <span class="mermaid-preview-zoom-value" aria-live="polite">100%</span>
+  `;
+  controls.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-zoom-action]");
+    if (!button) return;
+    if (button.dataset.zoomAction === "in") zoomMermaidPreview(1.15);
+    if (button.dataset.zoomAction === "out") zoomMermaidPreview(1 / 1.15);
+    if (button.dataset.zoomAction === "reset") setMermaidPreviewZoom(1);
+  });
+  return controls;
 }
 
 function showMermaidPreviewImage(url, { svgName, pngName, svgUrl, pngUrl }) {
@@ -1999,13 +2023,21 @@ function showMermaidPreviewImage(url, { svgName, pngName, svgUrl, pngUrl }) {
   image.className = "mermaid-preview-image";
   image.alt = "Mermaid PNG 预览";
   image.src = url;
+  image.addEventListener("load", () => {
+    image.dataset.baseWidth = String(image.naturalWidth || image.width || 1);
+    applyMermaidPreviewZoom();
+  }, { once: true });
   $("mermaidPreviewBody").replaceChildren(image);
+  setMermaidPreviewZoom(1);
 }
 
 function showMermaidPreviewFallback(svg, { svgName, svgUrl }) {
   setMermaidPreviewHeader("图表预览", "PNG 生成失败，可先下载 SVG。");
   showMermaidPreviewActions([makeMermaidPreviewDownload("下载 SVG", svgUrl, svgName)]);
+  const size = mermaidSvgSize(svg);
+  svg.dataset.baseWidth = String(size.width || 1);
   $("mermaidPreviewBody").replaceChildren(svg);
+  setMermaidPreviewZoom(1);
 }
 
 function setMermaidPreviewHeader(title, hint) {
@@ -2025,9 +2057,54 @@ function closeMermaidPreview() {
 
 function resetMermaidPreview() {
   state.mermaidPreviewToken += 1;
+  state.mermaidPreviewZoom = 1;
   revokeMermaidPreviewUrls();
   clearMermaidPreviewActions();
   $("mermaidPreviewBody").replaceChildren();
+}
+
+function setMermaidPreviewZoom(value) {
+  state.mermaidPreviewZoom = clamp(value, 0.4, 4);
+  applyMermaidPreviewZoom();
+}
+
+function zoomMermaidPreview(multiplier) {
+  setMermaidPreviewZoom(state.mermaidPreviewZoom * multiplier);
+}
+
+function applyMermaidPreviewZoom() {
+  const zoom = state.mermaidPreviewZoom || 1;
+  const target = $("mermaidPreviewBody").querySelector(".mermaid-preview-image, svg");
+  if (target) {
+    const baseWidth = Number(target.dataset.baseWidth) || target.naturalWidth || target.getBoundingClientRect().width || 760;
+    target.style.width = `${Math.max(120, Math.round(baseWidth * zoom))}px`;
+    target.style.height = "auto";
+  }
+  const value = $("mermaidPreviewActions").querySelector(".mermaid-preview-zoom-value");
+  if (value) value.textContent = `${Math.round(zoom * 100)}%`;
+}
+
+function handleMermaidPreviewKeydown(event) {
+  const tag = event.target?.tagName;
+  const isEditing = ["INPUT", "TEXTAREA", "SELECT"].includes(tag) || event.target?.isContentEditable;
+  if (isEditing) return;
+  const key = event.key.toLowerCase();
+  if (key === "+" || key === "=") {
+    event.preventDefault();
+    zoomMermaidPreview(1.15);
+  } else if (key === "-") {
+    event.preventDefault();
+    zoomMermaidPreview(1 / 1.15);
+  } else if (key === "0") {
+    event.preventDefault();
+    setMermaidPreviewZoom(1);
+  }
+}
+
+function handleMermaidPreviewWheel(event) {
+  if (!event.metaKey && !event.ctrlKey) return;
+  event.preventDefault();
+  zoomMermaidPreview(event.deltaY < 0 ? 1.12 : 1 / 1.12);
 }
 
 function mermaidDownloadName(extension) {
@@ -2780,6 +2857,7 @@ function rerenderPdfSoon() {
 }
 
 function handleGlobalShortcuts(event) {
+  if (event.defaultPrevented) return;
   const tag = event.target?.tagName;
   const isEditing = ["INPUT", "TEXTAREA", "SELECT"].includes(tag) || event.target?.isContentEditable;
   const key = event.key.toLowerCase();
@@ -2811,6 +2889,21 @@ function handleGlobalShortcuts(event) {
     return;
   }
   if (withCommand && key === "0") {
+    event.preventDefault();
+    setZoomMode("actual");
+    return;
+  }
+  if (!withCommand && !event.altKey && (key === "+" || key === "=")) {
+    event.preventDefault();
+    zoomBy(1.15);
+    return;
+  }
+  if (!withCommand && !event.altKey && key === "-") {
+    event.preventDefault();
+    zoomBy(1 / 1.15);
+    return;
+  }
+  if (!withCommand && !event.altKey && key === "0") {
     event.preventDefault();
     setZoomMode("actual");
     return;
@@ -4168,6 +4261,8 @@ function bindEvents() {
   $("settingsBtn").addEventListener("click", () => $("settingsDialog").showModal());
   $("closeMermaidPreviewBtn").addEventListener("click", closeMermaidPreview);
   $("mermaidPreviewDialog").addEventListener("close", resetMermaidPreview);
+  $("mermaidPreviewDialog").addEventListener("keydown", handleMermaidPreviewKeydown);
+  $("mermaidPreviewBody").addEventListener("wheel", handleMermaidPreviewWheel, { passive: false });
   $("saveConversationTitleBtn").addEventListener("click", saveConversationTitle);
   $("savePaperTitleBtn").addEventListener("click", savePaperTitle);
   $("activePaperTitle").addEventListener("dblclick", openActivePaperRename);

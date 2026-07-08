@@ -142,7 +142,7 @@ file:///C:/Users/me/Documents/paper.pdf
 - 对选中文本的默认提示词是先翻译，再做简短分析。
 - 一次消息可以加入多个选区。
 - Codex 回复支持常见 Markdown 渲染，包括列表、引用、行内代码、代码块，以及 fenced `mermaid` 图表。即使模型只输出普通代码块，只要内容以 `flowchart`、`sequenceDiagram` 等常见 Mermaid 声明开头，也会自动识别渲染。
-- 双击已渲染的 Mermaid 图表可以打开 PNG 预览，预览框里提供 SVG 和 PNG 下载选项。
+- 双击已渲染的 Mermaid 图表可以打开 PNG 预览，预览框支持缩放，并提供 SVG 和 PNG 下载选项。
 
 ### 会话和任务
 
@@ -174,14 +174,16 @@ file:///C:/Users/me/Documents/paper.pdf
 | prompt 命令菜单内 `Enter` | 插入选中的 prompt |
 | `Escape` | 关闭选区按钮、prompt 菜单等临时界面 |
 | `Cmd/Ctrl + Shift + S` | 停止当前对话正在运行的任务 |
-| `Cmd/Ctrl + +` 或 `Cmd/Ctrl + =` | 放大 PDF |
-| `Cmd/Ctrl + -` | 缩小 PDF |
-| `Cmd/Ctrl + 0` | PDF 缩放恢复到 100% |
+| `+`、`=` 或 `Cmd/Ctrl + +` | 放大 PDF |
+| `-` 或 `Cmd/Ctrl + -` | 缩小 PDF |
+| `0` 或 `Cmd/Ctrl + 0` | PDF 缩放恢复到 100% |
 | `F` | PDF 适合宽度 |
 | `Space` | PDF 阅读器向下滚动 |
 | `Shift+Space` | PDF 阅读器向上滚动 |
 | `PageDown` | PDF 阅读器向下滚动 |
 | `PageUp` | PDF 阅读器向上滚动 |
+| Mermaid 预览框内 `+`、`-`、`0` | 放大、缩小或恢复图表预览到 100% |
+| Mermaid 预览框内 `Cmd/Ctrl + 鼠标滚轮` | 平滑缩放图表预览 |
 | 改名弹窗内 `Enter` | 保存新的论文名或会话名 |
 | 聚焦会话文件夹时 `Alt+Up/Down` | 将该文件夹前移或后移 |
 | 聚焦会话时 `Alt+Up/Down` | 将该会话在当前文件夹内前移或后移 |

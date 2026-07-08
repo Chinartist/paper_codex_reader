@@ -142,7 +142,7 @@ file:///C:/Users/me/Documents/paper.pdf
 - For selected passages, the default prompt asks Codex to translate first and then analyze briefly.
 - Add multiple selected passages to one message before sending.
 - Assistant replies render common Markdown such as lists, quotes, inline code, code blocks, and fenced `mermaid` diagrams. Plain code blocks that start with common Mermaid declarations such as `flowchart` or `sequenceDiagram` are auto-detected too.
-- Double-click a rendered Mermaid diagram to open a PNG preview. The preview dialog provides SVG and PNG download actions.
+- Double-click a rendered Mermaid diagram to open a PNG preview. The preview dialog supports zooming and provides SVG and PNG download actions.
 
 ### Conversations And Tasks
 
@@ -174,14 +174,16 @@ Most reader shortcuts are ignored while typing in an input, textarea, select, or
 | `Enter` in the prompt command menu | Insert the selected prompt |
 | `Escape` | Close transient UI such as selection and prompt menus |
 | `Cmd/Ctrl + Shift + S` | Stop the active running task for the current conversation |
-| `Cmd/Ctrl + +` or `Cmd/Ctrl + =` | Zoom in |
-| `Cmd/Ctrl + -` | Zoom out |
-| `Cmd/Ctrl + 0` | Set PDF zoom to 100% |
+| `+`, `=` or `Cmd/Ctrl + +` | Zoom in |
+| `-` or `Cmd/Ctrl + -` | Zoom out |
+| `0` or `Cmd/Ctrl + 0` | Set PDF zoom to 100% |
 | `F` | Fit PDF to width |
 | `Space` | Scroll the PDF reader down |
 | `Shift+Space` | Scroll the PDF reader up |
 | `PageDown` | Scroll the PDF reader down |
 | `PageUp` | Scroll the PDF reader up |
+| `+`, `-`, `0` in Mermaid preview | Zoom the diagram preview in, out, or back to 100% |
+| `Cmd/Ctrl + mouse wheel` in Mermaid preview | Smoothly zoom the diagram preview |
 | `Enter` in rename dialogs | Save the new paper or conversation name |
 | `Alt+Up/Down` on a conversation folder | Move that folder earlier or later |
 | `Alt+Up/Down` on a conversation | Move that conversation earlier or later inside its folder |
