@@ -1714,7 +1714,7 @@ function markdownToHtml(value) {
 
   const flushCode = () => {
     const source = codeLines.join("\n");
-    if (codeLanguage === "mermaid") {
+    if (shouldRenderMermaidCode(source, codeLanguage)) {
       html.push(`<div class="mermaid-block"><pre class="mermaid">${escapeHtml(source)}</pre></div>`);
     } else {
       const languageClass = codeLanguage ? ` class="language-${escapeHtml(codeLanguage)}"` : "";
@@ -1817,6 +1817,22 @@ function markdownToHtml(value) {
 function parseCodeLanguage(fenceLine) {
   const match = /^```\s*([A-Za-z0-9_-]+)?/.exec(fenceLine.trim());
   return (match?.[1] || "").toLowerCase();
+}
+
+function shouldRenderMermaidCode(source, language = "") {
+  const normalizedLanguage = String(language || "").toLowerCase();
+  if (normalizedLanguage === "mermaid") return true;
+  if (!["", "text", "txt", "plain", "plaintext"].includes(normalizedLanguage)) return false;
+  return looksLikeMermaid(source);
+}
+
+function looksLikeMermaid(source) {
+  const firstMeaningfulLine = String(source || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line && !line.startsWith("%%"));
+  if (!firstMeaningfulLine) return false;
+  return /^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph|quadrantChart|requirementDiagram|C4Context|C4Container|C4Component|C4Dynamic|block-beta|packet-beta|xychart-beta|sankey-beta|architecture-beta|kanban|radar-beta)\b/.test(firstMeaningfulLine);
 }
 
 function setupMermaid() {

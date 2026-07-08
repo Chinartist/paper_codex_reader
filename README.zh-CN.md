@@ -141,7 +141,7 @@ file:///C:/Users/me/Documents/paper.pdf
 - 点击 `读全文` 会把当前 PDF 路径作为 Codex 风格的 `@file` 引用发给 Codex，让同一个对话读完整篇论文。
 - 对选中文本的默认提示词是先翻译，再做简短分析。
 - 一次消息可以加入多个选区。
-- Codex 回复支持常见 Markdown 渲染，包括列表、引用、行内代码、代码块，以及 fenced `mermaid` 图表。
+- Codex 回复支持常见 Markdown 渲染，包括列表、引用、行内代码、代码块，以及 fenced `mermaid` 图表。即使模型只输出普通代码块，只要内容以 `flowchart`、`sequenceDiagram` 等常见 Mermaid 声明开头，也会自动识别渲染。
 
 ### 会话和任务
 
