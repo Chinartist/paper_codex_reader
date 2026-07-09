@@ -1383,6 +1383,9 @@ body.sidebar-sorting * {
 .paper-conversations-trigger,
 .recent-paper-trigger {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 34px;
   height: 34px;
   min-width: 34px;
@@ -1395,28 +1398,23 @@ body.sidebar-sorting * {
   box-shadow: none;
 }
 
-.paper-conversations-trigger::before {
-  content: "";
-  position: absolute;
-  left: 10px;
-  top: 10px;
-  width: 13px;
-  height: 1.8px;
-  border-radius: 999px;
-  background: currentColor;
-  box-shadow: 0 5px 0 currentColor, 0 10px 0 currentColor;
+.paper-conversations-icon {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.85;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.92;
+  transform: translateX(0.5px);
+  transition: opacity 150ms ease, transform 150ms ease;
 }
 
-.paper-conversations-trigger::after {
-  content: "";
-  position: absolute;
-  right: 8px;
-  top: 11px;
-  width: 6px;
-  height: 6px;
-  border-right: 1.8px solid currentColor;
-  border-bottom: 1.8px solid currentColor;
-  transform: rotate(-45deg);
+.paper-conversations-trigger:hover:not(:disabled) .paper-conversations-icon,
+.paper-conversations-trigger:focus-visible .paper-conversations-icon {
+  opacity: 1;
+  transform: translateX(1.5px);
 }
 
 .recent-paper-trigger::before {

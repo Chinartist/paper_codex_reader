@@ -60,7 +60,15 @@
       <header class="reader-toolbar">
         <div class="reader-title">
           <strong id="activePaperTitle" tabindex="0" role="button" aria-label="重命名当前论文" title="双击重命名论文">未选择论文</strong>
-          <button id="paperConversationsBtn" class="paper-conversations-trigger" type="button" aria-label="跳到当前论文的会话" title="跳到当前论文的会话" disabled></button>
+          <button id="paperConversationsBtn" class="paper-conversations-trigger" type="button" aria-label="跳到当前论文的会话" title="跳到当前论文的会话" disabled>
+            <svg class="paper-conversations-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 6.5h7.5" />
+              <path d="M5 11h6.5" />
+              <path d="M5 15.5h7.5" />
+              <path d="M15 8.5 18.5 12 15 15.5" />
+              <path d="M13.5 12h5" />
+            </svg>
+          </button>
           <div id="recentPaperSwitcher" class="recent-paper-switcher">
             <button id="recentPaperTrigger" class="recent-paper-trigger" type="button" aria-label="最近打开" title="最近打开" aria-haspopup="menu" aria-expanded="false"></button>
             <div id="recentPaperMenu" class="recent-paper-menu" role="menu"></div>
