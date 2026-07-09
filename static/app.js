@@ -1699,6 +1699,56 @@ async function openPaperForGroup(group) {
   await selectPaper(group.paperId);
 }
 
+function activePaperGroupKey() {
+  return state.activePaper?.id ? `paper:${state.activePaper.id}` : "";
+}
+
+function groupForKey(groupKey) {
+  return conversationGroups().find((group) => group.key === groupKey) || null;
+}
+
+function flashConversationLocation(groupKey, conversationId = "") {
+  const folder = $("conversationsList").querySelector(`.conversation-folder[data-group-key="${cssEscape(groupKey)}"]`);
+  if (!folder) return;
+  const item = conversationId
+    ? folder.querySelector(`.conversation-item[data-conversation-id="${cssEscape(conversationId)}"]`)
+    : null;
+  const target = item || folder;
+  target.scrollIntoView({ block: "center", behavior: "smooth" });
+  for (const node of [folder, item].filter(Boolean)) {
+    node.classList.remove("location-flash");
+    node.getBoundingClientRect();
+    node.classList.add("location-flash");
+    window.setTimeout(() => node.classList.remove("location-flash"), 1800);
+  }
+}
+
+async function jumpToActivePaperConversations() {
+  const groupKey = activePaperGroupKey();
+  if (!groupKey) {
+    toast("请先打开一篇论文");
+    return;
+  }
+  setSidebarCollapsed(false);
+  setChatCollapsed(false);
+  state.collapsedConversationGroups[groupKey] = false;
+  localStorage.setItem("paperCodexCollapsedConversationGroups", JSON.stringify(state.collapsedConversationGroups));
+  renderConversations();
+
+  const group = groupForKey(groupKey);
+  const savedConversationId = state.readingState?.lastConversationByPaper?.[groupKey] || "";
+  const targetConversation = group?.conversations.find((conv) => conv.id === savedConversationId)
+    || group?.conversations[0]
+    || null;
+  if (targetConversation) {
+    await selectConversation(targetConversation.id, { restoreMessagePosition: true });
+    flashConversationLocation(groupKey, targetConversation.id);
+  } else {
+    flashConversationLocation(groupKey);
+    toast("这篇论文还没有会话，可以在对应文件夹里新建对话");
+  }
+}
+
 async function ensureConversation() {
   if (state.activeConversation) {
     return state.activeConversation;
@@ -4105,6 +4155,7 @@ function updateButtons() {
   $("sendBtn").setAttribute("aria-label", stopMode ? "停止当前任务" : "发送");
   $("sendBtn").setAttribute("title", stopMode ? "停止当前任务" : "发送");
   $("initializeBtn").disabled = state.busy || !state.activePaper;
+  $("paperConversationsBtn").disabled = !state.activePaper;
   updateContextHint();
   renderSendPreview();
   showActiveWorkStatus();
@@ -4612,6 +4663,7 @@ function bindEvents() {
   $("mermaidPreviewBody").addEventListener("wheel", handleMermaidPreviewWheel, { passive: false });
   $("saveConversationTitleBtn").addEventListener("click", saveConversationTitle);
   $("savePaperTitleBtn").addEventListener("click", savePaperTitle);
+  $("paperConversationsBtn").addEventListener("click", jumpToActivePaperConversations);
   $("activePaperTitle").addEventListener("dblclick", openActivePaperRename);
   $("activePaperTitle").addEventListener("keydown", (event) => {
     if (event.key !== "Enter" && event.key !== "F2") return;

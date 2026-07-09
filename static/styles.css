@@ -591,6 +591,21 @@ body.chat-collapsed .chat-edge-toggle {
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.2);
 }
 
+.conversation-folder.location-flash .folder-toggle,
+.conversation-item.location-flash {
+  animation: sidebarLocationFlash 1400ms ease-out;
+}
+
+@keyframes sidebarLocationFlash {
+  0% {
+    border-color: rgba(96, 165, 250, 0.88);
+    box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.18), inset 2px 0 0 #60a5fa;
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+
 body.sidebar-sorting,
 body.sidebar-sorting * {
   cursor: grabbing !important;
@@ -1365,6 +1380,7 @@ body.sidebar-sorting * {
   opacity: 0.72;
 }
 
+.paper-conversations-trigger,
 .recent-paper-trigger {
   position: relative;
   width: 34px;
@@ -1377,6 +1393,30 @@ body.sidebar-sorting * {
   color: #475569;
   padding: 0;
   box-shadow: none;
+}
+
+.paper-conversations-trigger::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  width: 13px;
+  height: 1.8px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 5px 0 currentColor, 0 10px 0 currentColor;
+}
+
+.paper-conversations-trigger::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  top: 11px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.8px solid currentColor;
+  border-bottom: 1.8px solid currentColor;
+  transform: rotate(-45deg);
 }
 
 .recent-paper-trigger::before {
@@ -1403,6 +1443,8 @@ body.sidebar-sorting * {
   transform: rotate(0deg);
 }
 
+.paper-conversations-trigger:hover:not(:disabled),
+.paper-conversations-trigger:focus-visible,
 .recent-paper-trigger:hover:not(:disabled),
 .recent-paper-switcher:focus-within .recent-paper-trigger,
 .recent-paper-switcher.open .recent-paper-trigger {
@@ -1412,6 +1454,7 @@ body.sidebar-sorting * {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
+.paper-conversations-trigger:disabled,
 .recent-paper-trigger:disabled {
   cursor: default;
   opacity: 0.5;
