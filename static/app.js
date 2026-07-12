@@ -1980,6 +1980,14 @@ function markdownToHtml(value) {
       continue;
     }
 
+    if (isMarkdownTableStart(lines, index)) {
+      closeList();
+      const table = renderMarkdownTable(lines, index);
+      html.push(table.html);
+      index = table.nextIndex;
+      continue;
+    }
+
     const unordered = /^[-*]\s+(.+)$/.exec(line);
     const ordered = /^\d+[.)]\s+(.+)$/.exec(line);
     if (unordered || ordered) {
@@ -2006,6 +2014,7 @@ function markdownToHtml(value) {
         || /^(#{1,3})\s+/.test(next)
         || /^[-*]\s+/.test(next)
         || /^\d+[.)]\s+/.test(next)
+        || isMarkdownTableStart(lines, index)
       ) {
         break;
       }
@@ -2018,6 +2027,94 @@ function markdownToHtml(value) {
   if (inCode) flushCode();
   closeList();
   return html.join("");
+}
+
+function isMarkdownTableStart(lines, index) {
+  if (index + 1 >= lines.length) return false;
+  const header = lines[index].trim();
+  const separator = lines[index + 1].trim();
+  if (!isMarkdownTableRow(header) || !isMarkdownTableRow(separator)) return false;
+  const headerCells = splitMarkdownTableRow(header);
+  const separatorCells = splitMarkdownTableRow(separator);
+  if (headerCells.length < 2 || separatorCells.length < 2) return false;
+  return separatorCells.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, "")));
+}
+
+function isMarkdownTableRow(line) {
+  const value = String(line || "").trim();
+  return value.includes("|") && !value.startsWith("```");
+}
+
+function splitMarkdownTableRow(line) {
+  let value = String(line || "").trim();
+  if (value.startsWith("|")) value = value.slice(1);
+  if (value.endsWith("|")) value = value.slice(0, -1);
+  const cells = [];
+  let current = "";
+  let escaped = false;
+  for (const char of value) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      current += char;
+      escaped = true;
+      continue;
+    }
+    if (char === "|") {
+      cells.push(current.trim().replaceAll("\\|", "|"));
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  cells.push(current.trim().replaceAll("\\|", "|"));
+  return cells;
+}
+
+function markdownTableAlignments(separatorLine) {
+  return splitMarkdownTableRow(separatorLine).map((cell) => {
+    const value = cell.replace(/\s+/g, "");
+    if (value.startsWith(":") && value.endsWith(":")) return "center";
+    if (value.endsWith(":")) return "right";
+    return "left";
+  });
+}
+
+function renderMarkdownTable(lines, startIndex) {
+  const headers = splitMarkdownTableRow(lines[startIndex]);
+  const alignments = markdownTableAlignments(lines[startIndex + 1]);
+  const rows = [];
+  let index = startIndex + 2;
+  while (index < lines.length && isMarkdownTableRow(lines[index]) && lines[index].trim()) {
+    if (lines[index].trim().startsWith(">") || lines[index].trim().startsWith("```")) break;
+    rows.push(splitMarkdownTableRow(lines[index]));
+    index += 1;
+  }
+
+  const columnCount = Math.max(headers.length, ...rows.map((row) => row.length));
+  const cellStyle = (columnIndex) => {
+    const align = alignments[columnIndex] || "left";
+    return align === "left" ? "" : ` style="text-align: ${align}"`;
+  };
+  const normalizedCells = (cells, tag) => Array.from({ length: columnCount }, (_, columnIndex) => {
+    const content = inlineMarkdown(cells[columnIndex] || "");
+    return `<${tag}${cellStyle(columnIndex)}>${content}</${tag}>`;
+  }).join("");
+
+  return {
+    nextIndex: index,
+    html: `
+      <div class="markdown-table-wrap">
+        <table>
+          <thead><tr>${normalizedCells(headers, "th")}</tr></thead>
+          <tbody>${rows.map((row) => `<tr>${normalizedCells(row, "td")}</tr>`).join("")}</tbody>
+        </table>
+      </div>
+    `,
+  };
 }
 
 function parseCodeLanguage(fenceLine) {
