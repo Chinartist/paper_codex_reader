@@ -85,12 +85,22 @@
           </div>
         </div>
       </header>
-      <div class="pdf-stage">
+      <div id="pdfStage" class="pdf-stage">
         <div id="outlineSwitcher" class="outline-switcher hidden">
           <button id="outlineTrigger" class="outline-trigger" type="button" aria-haspopup="menu" aria-expanded="false">
             目录
           </button>
           <div id="outlineMenu" class="outline-menu" role="menu"></div>
+        </div>
+        <div id="pdfDropOverlay" class="pdf-drop-overlay" role="status" aria-live="polite" aria-hidden="true">
+          <svg class="pdf-drop-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M7 3.5h7l4 4V20.5H7z" />
+            <path d="M14 3.5v4h4" />
+            <path d="M12 16v-5" />
+            <path d="m9.5 13.5 2.5-2.5 2.5 2.5" />
+          </svg>
+          <strong>松开即可导入 PDF</strong>
+          <span>支持一次拖入多篇论文</span>
         </div>
         <div id="pdfViewer" class="pdf-viewer" aria-label="PDF 阅读器">
           <div class="empty-state">
@@ -211,13 +221,11 @@
             </label>
             <label class="composer-select" for="quickReasoningInput">
               <span class="sr-only">推理</span>
-              <select id="quickReasoningInput">
-                <option value="minimal">minimal</option>
-                <option value="low">low</option>
-                <option value="medium">medium</option>
-                <option value="high">high</option>
-                <option value="xhigh">xhigh</option>
-              </select>
+              <select id="quickReasoningInput" title="推理级别"></select>
+            </label>
+            <label class="composer-select" for="quickSpeedInput">
+              <span class="sr-only">速度</span>
+              <select id="quickSpeedInput" title="响应速度"></select>
             </label>
             <button id="initializeBtn" class="secondary-btn" type="button" disabled>读全文</button>
           </div>
@@ -317,13 +325,12 @@
         </label>
         <label>
           推理级别
-          <select id="reasoningInput">
-            <option value="minimal">minimal</option>
-            <option value="low">low</option>
-            <option value="medium">medium</option>
-            <option value="high">high</option>
-            <option value="xhigh">xhigh</option>
-          </select>
+          <select id="reasoningInput"></select>
+        </label>
+        <label>
+          响应速度
+          <select id="speedInput"></select>
+          <small class="field-help">快速档约为 1.5 倍速度，但会增加额度消耗。</small>
         </label>
         <label>
           输出详细度

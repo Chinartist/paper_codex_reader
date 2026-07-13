@@ -1323,6 +1323,49 @@ body.sidebar-sorting * {
   min-height: 0;
 }
 
+.pdf-drop-overlay {
+  position: absolute;
+  inset: 14px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px dashed rgba(37, 99, 235, 0.72);
+  border-radius: 8px;
+  background: rgba(244, 247, 255, 0.94);
+  color: var(--accent-ink);
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.99);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.pdf-stage.dragging-pdf .pdf-drop-overlay {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.pdf-drop-overlay strong {
+  font-size: 18px;
+}
+
+.pdf-drop-overlay span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.pdf-drop-icon {
+  width: 48px;
+  height: 48px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .pdf-viewer {
   height: 100%;
   overflow: auto;
@@ -3996,6 +4039,12 @@ body.resizing-chat {
 
 .settings-dialog form > label:nth-of-type(even) {
   background: #fbfcfd;
+}
+
+.field-help {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .sr-only {

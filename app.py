@@ -35,7 +35,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 APP_DIR = pathlib.Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
-DEFAULT_MODEL = "gpt-5.5"
+DEFAULT_MODEL = "gpt-5.6-sol"
 
 
 def default_home() -> pathlib.Path:
@@ -483,7 +483,8 @@ class Store:
             defaults = {
                 "codex_path": self.find_codex_path(),
                 "model": DEFAULT_MODEL,
-                "reasoning_effort": "high",
+                "reasoning_effort": "medium",
+                "service_tier": "default",
                 "verbosity": "medium",
                 "paper_chunk_chars": "18000",
                 "codex_timeout_seconds": "600",
@@ -509,7 +510,15 @@ class Store:
             return data
 
     def update_settings(self, data: Dict[str, Any]) -> Dict[str, str]:
-        allowed = {"codex_path", "model", "reasoning_effort", "verbosity", "paper_chunk_chars", "codex_timeout_seconds"}
+        allowed = {
+            "codex_path",
+            "model",
+            "reasoning_effort",
+            "service_tier",
+            "verbosity",
+            "paper_chunk_chars",
+            "codex_timeout_seconds",
+        }
         with self.connect() as con:
             for key, value in data.items():
                 if key in allowed:
@@ -1094,7 +1103,8 @@ class CodexRunner:
         path = settings.get("codex_path") or "codex"
         self._ensure_cli(path)
         model = (settings.get("model") or DEFAULT_MODEL).strip()
-        effort = settings.get("reasoning_effort", "high").strip()
+        effort = settings.get("reasoning_effort", "medium").strip()
+        service_tier = settings.get("service_tier", "default").strip()
         verbosity = settings.get("verbosity", "medium").strip()
         timeout = int(settings.get("codex_timeout_seconds", "600") or "600")
         opts: List[str] = ['-c', 'approval_policy="never"']
@@ -1102,6 +1112,8 @@ class CodexRunner:
             opts += ["-m", model]
         if effort:
             opts += ["-c", f'model_reasoning_effort="{effort}"']
+        if service_tier:
+            opts += ["-c", f'service_tier="{service_tier}"']
         if verbosity:
             opts += ["-c", f'model_verbosity="{verbosity}"']
         return path, opts, timeout

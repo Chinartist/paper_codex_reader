@@ -91,15 +91,29 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 
-const DEFAULT_MODEL = "gpt-5.5";
+const DEFAULT_MODEL = "gpt-5.6-sol";
 
 const MODEL_OPTIONS = [
-  { value: "gpt-5.5", label: "gpt-5.5" },
-  { value: "gpt-5.4", label: "gpt-5.4" },
-  { value: "gpt-5.4-mini", label: "gpt-5.4-mini" },
-  { value: "gpt-5.3-codex-spark", label: "gpt-5.3-codex-spark" },
+  { value: "gpt-5.6-sol", label: "GPT-5.6 Sol · 最强", reasoning: ["low", "medium", "high", "xhigh", "max", "ultra"], fast: true },
+  { value: "gpt-5.6-terra", label: "GPT-5.6 Terra · 均衡", reasoning: ["low", "medium", "high", "xhigh", "max", "ultra"], fast: true },
+  { value: "gpt-5.6-luna", label: "GPT-5.6 Luna · 省用量", reasoning: ["low", "medium", "high", "xhigh", "max"], fast: true },
+  { value: "gpt-5.5", label: "GPT-5.5", reasoning: ["low", "medium", "high", "xhigh"], fast: true },
+  { value: "gpt-5.4", label: "GPT-5.4", reasoning: ["low", "medium", "high", "xhigh"], fast: true },
+  { value: "gpt-5.4-mini", label: "GPT-5.4 mini", reasoning: ["low", "medium", "high", "xhigh"], fast: false },
+  { value: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark", reasoning: ["low", "medium", "high", "xhigh"], fast: false },
   { value: "__custom__", label: "自定义..." },
 ];
+
+const REASONING_LABELS = {
+  low: "低",
+  medium: "中",
+  high: "高",
+  xhigh: "极高",
+  max: "最大",
+  ultra: "Ultra · 自动分派",
+};
+
+const FALLBACK_REASONING_LEVELS = ["low", "medium", "high", "xhigh"];
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
@@ -174,10 +188,8 @@ async function loadSettings() {
   state.settings = await api("/api/settings");
   $("codexPathInput").value = state.settings.codex_path || "";
   syncModelControls(state.settings.model || "");
-  $("reasoningInput").value = state.settings.reasoning_effort || "high";
   $("verbosityInput").value = state.settings.verbosity || "medium";
   $("timeoutInput").value = state.settings.codex_timeout_seconds || "600";
-  $("quickReasoningInput").value = state.settings.reasoning_effort || "high";
 }
 
 async function saveSettings() {
@@ -185,6 +197,7 @@ async function saveSettings() {
     codex_path: $("codexPathInput").value.trim(),
     model: selectedModelValue("modelInput", "customModelInput"),
     reasoning_effort: $("reasoningInput").value,
+    service_tier: $("speedInput").value,
     verbosity: $("verbosityInput").value,
     codex_timeout_seconds: $("timeoutInput").value,
   };
@@ -193,7 +206,6 @@ async function saveSettings() {
     body: JSON.stringify(payload),
   });
   syncModelControls(state.settings.model || "");
-  $("quickReasoningInput").value = state.settings.reasoning_effort || "high";
   toast("设置已保存");
   await loadStatus();
 }
@@ -203,13 +215,13 @@ async function saveQuickSettings() {
     ...state.settings,
     model: selectedModelValue("quickModelInput", "quickCustomModelInput"),
     reasoning_effort: $("quickReasoningInput").value,
+    service_tier: $("quickSpeedInput").value,
   };
   state.settings = await api("/api/settings", {
     method: "POST",
     body: JSON.stringify(payload),
   });
   syncModelControls(state.settings.model || "");
-  $("reasoningInput").value = state.settings.reasoning_effort || "high";
   toast("Codex 配置已更新");
   await loadStatus();
 }
@@ -225,14 +237,46 @@ function populateModelSelects() {
 
 function syncModelControls(value) {
   const normalizedValue = value || DEFAULT_MODEL;
-  for (const [selectId, customId] of [["modelInput", "customModelInput"], ["quickModelInput", "quickCustomModelInput"]]) {
+  const controls = [
+    ["modelInput", "customModelInput", "reasoningInput", "speedInput"],
+    ["quickModelInput", "quickCustomModelInput", "quickReasoningInput", "quickSpeedInput"],
+  ];
+  for (const [selectId, customId, reasoningId, speedId] of controls) {
     const select = $(selectId);
     const custom = $(customId);
     const exists = MODEL_OPTIONS.some((option) => option.value === normalizedValue);
     select.value = exists ? normalizedValue : "__custom__";
     custom.value = exists ? "" : normalizedValue;
     custom.classList.toggle("hidden", select.value !== "__custom__");
+    populateReasoningSelect(reasoningId, normalizedValue, state.settings.reasoning_effort);
+    populateSpeedSelect(speedId, normalizedValue, state.settings.service_tier);
   }
+}
+
+function modelOption(value) {
+  return MODEL_OPTIONS.find((option) => option.value === value && option.value !== "__custom__") || null;
+}
+
+function populateReasoningSelect(selectId, modelValue, preferredValue) {
+  const option = modelOption(modelValue);
+  const levels = option?.reasoning || FALLBACK_REASONING_LEVELS;
+  const preferred = String(preferredValue || "medium");
+  const selected = levels.includes(preferred) ? preferred : "medium";
+  $(selectId).innerHTML = levels.map((level) => (
+    `<option value="${level}">${escapeHtml(REASONING_LABELS[level] || level)}</option>`
+  )).join("");
+  $(selectId).value = selected;
+}
+
+function populateSpeedSelect(selectId, modelValue, preferredValue) {
+  const option = modelOption(modelValue);
+  const supportsFast = option ? option.fast : true;
+  const choices = [{ value: "default", label: "标准" }];
+  if (supportsFast) choices.push({ value: "priority", label: "快速 1.5×" });
+  $(selectId).innerHTML = choices.map((choice) => (
+    `<option value="${choice.value}">${choice.label}</option>`
+  )).join("");
+  $(selectId).value = supportsFast && preferredValue === "priority" ? "priority" : "default";
 }
 
 function selectedModelValue(selectId, customId) {
@@ -246,6 +290,10 @@ function selectedModelValue(selectId, customId) {
 function handleModelChange(selectId, customId) {
   const custom = $(customId);
   custom.classList.toggle("hidden", $(selectId).value !== "__custom__");
+  const quick = selectId === "quickModelInput";
+  const modelValue = selectedModelValue(selectId, customId);
+  populateReasoningSelect(quick ? "quickReasoningInput" : "reasoningInput", modelValue, quick ? $("quickReasoningInput").value : $("reasoningInput").value);
+  populateSpeedSelect(quick ? "quickSpeedInput" : "speedInput", modelValue, quick ? $("quickSpeedInput").value : $("speedInput").value);
   if ($(selectId).value === "__custom__") {
     custom.focus();
   }
@@ -1014,7 +1062,8 @@ async function importPaper(options = {}) {
   const filesOnly = options.filesOnly === true;
   const sources = filesOnly ? [] : parsePaperSources($("paperSourceInput").value);
   const title = $("paperTitleInput").value.trim();
-  const files = [...state.selectedFiles];
+  const files = options.files ? [...options.files] : [...state.selectedFiles];
+  const skippedCount = Number(options.skippedCount) || 0;
   const items = [
     ...files.map((file) => ({ type: "file", file, label: file.name })),
     ...sources.map((source) => ({ type: "source", source, label: source })),
@@ -1061,6 +1110,10 @@ async function importPaper(options = {}) {
       finalToast = "导入失败，请检查来源";
       finalToastDelay = 9000;
     }
+    if (skippedCount) {
+      finalToast = `${finalToast}，已忽略 ${skippedCount} 个非 PDF 文件`;
+      finalToastDelay = Math.max(finalToastDelay, 6000);
+    }
   } catch (error) {
     finalToast = error.message;
     finalToastDelay = 7000;
@@ -1068,6 +1121,34 @@ async function importPaper(options = {}) {
     setBusy(false);
     if (finalToast) toast(finalToast, finalToastDelay);
   }
+}
+
+function isPdfFile(file) {
+  return file?.type === "application/pdf" || String(file?.name || "").toLowerCase().endsWith(".pdf");
+}
+
+function hasDraggedFiles(event) {
+  return [...(event.dataTransfer?.types || [])].includes("Files");
+}
+
+function setPdfDropActive(active) {
+  $("pdfStage").classList.toggle("dragging-pdf", active);
+  $("pdfDropOverlay").setAttribute("aria-hidden", String(!active));
+}
+
+function importDroppedPdfs(files) {
+  if (state.busy) {
+    toast("当前任务完成后再导入 PDF", 5000);
+    return;
+  }
+  const allFiles = [...(files || [])];
+  const pdfFiles = allFiles.filter(isPdfFile);
+  const skippedCount = allFiles.length - pdfFiles.length;
+  if (!pdfFiles.length) {
+    toast("这里只能导入 PDF 文件", 5000);
+    return;
+  }
+  importPaper({ filesOnly: true, files: pdfFiles, skippedCount });
 }
 
 function parsePaperSources(value) {
@@ -4585,6 +4666,39 @@ function bindEvents() {
     }
   });
   $("importPaperBtn").addEventListener("click", importPaper);
+  let pdfDragDepth = 0;
+  $("pdfStage").addEventListener("dragenter", (event) => {
+    if (!hasDraggedFiles(event)) return;
+    event.preventDefault();
+    pdfDragDepth += 1;
+    setPdfDropActive(true);
+  });
+  $("pdfStage").addEventListener("dragover", (event) => {
+    if (!hasDraggedFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setPdfDropActive(true);
+  });
+  $("pdfStage").addEventListener("dragleave", (event) => {
+    if (!hasDraggedFiles(event)) return;
+    pdfDragDepth = Math.max(0, pdfDragDepth - 1);
+    if (!pdfDragDepth) setPdfDropActive(false);
+  });
+  $("pdfStage").addEventListener("drop", (event) => {
+    if (!hasDraggedFiles(event)) return;
+    event.preventDefault();
+    pdfDragDepth = 0;
+    setPdfDropActive(false);
+    importDroppedPdfs(event.dataTransfer?.files);
+  });
+  window.addEventListener("dragend", () => {
+    pdfDragDepth = 0;
+    setPdfDropActive(false);
+  });
+  window.addEventListener("drop", () => {
+    pdfDragDepth = 0;
+    setPdfDropActive(false);
+  });
   $("initializeBtn").addEventListener("click", initializeConversation);
   $("sendBtn").addEventListener("click", handleComposerAction);
   $("cancelResendEditBtn").addEventListener("click", cancelResendEdit);
@@ -4793,6 +4907,7 @@ function bindEvents() {
   });
   $("modelInput").addEventListener("change", () => handleModelChange("modelInput", "customModelInput"));
   $("quickReasoningInput").addEventListener("change", saveQuickSettings);
+  $("quickSpeedInput").addEventListener("change", saveQuickSettings);
   $("saveSettingsBtn").addEventListener("click", async (event) => {
     event.preventDefault();
     await saveSettings();
