@@ -32,10 +32,150 @@ import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+try:
+    from pypdf import PdfReader
+except ImportError:  # The reader still works with filename fallbacks if installation is incomplete.
+    PdfReader = None
+
 
 APP_DIR = pathlib.Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
 DEFAULT_MODEL = "gpt-5.6-sol"
+
+
+def clean_pdf_title(value: Any) -> str:
+    title = re.sub(r"\s+", " ", str(value or "").replace("\x00", " ")).strip(" -_|\t\r\n")
+    return title[:300].strip()
+
+
+def is_useful_pdf_title(title: str, fallback_stem: str = "") -> bool:
+    clean = clean_pdf_title(title)
+    if len(clean) < 6:
+        return False
+    lowered = clean.casefold()
+    generic = {
+        "untitled",
+        "document",
+        "microsoft word",
+        "pdf document",
+        "latex document",
+    }
+    if lowered in generic or lowered.startswith("arxiv:") or lowered.endswith(".pdf"):
+        return False
+    fallback = clean_pdf_title(fallback_stem).casefold()
+    if fallback and lowered == fallback and re.fullmatch(r"[\w.-]*\d[\w.-]*", clean):
+        return False
+    return True
+
+
+def join_pdf_title_fragments(parts: List[str]) -> str:
+    result = ""
+    for raw in parts:
+        part = clean_pdf_title(raw)
+        if not part:
+            continue
+        if not result:
+            result = part
+        elif (
+            part[0] in ".,:;!?)]}"
+            or result[-1] in "([{πΠ"
+            or (result[-1] == "." and part[0].isdigit())
+        ):
+            result += part
+        else:
+            result += f" {part}"
+    return clean_pdf_title(result)
+
+
+def first_page_pdf_title(page: Any, fallback_stem: str = "") -> str:
+    fragments: List[Tuple[float, float, float, str]] = []
+
+    def collect_fragment(text: str, _cm: Any, tm: Any, _font: Any, font_size: Any) -> None:
+        clean = clean_pdf_title(text)
+        if not clean or re.fullmatch(r"(?:/C\d+)+", clean):
+            return
+        try:
+            x = float(tm[4])
+            y = float(tm[5])
+            size = float(font_size)
+        except (IndexError, TypeError, ValueError):
+            return
+        fragments.append((y, x, size, clean))
+
+    try:
+        page.extract_text(visitor_text=collect_fragment)
+        page_height = float(page.mediabox.height)
+    except Exception:
+        return ""
+
+    visible = [
+        item for item in fragments
+        if page_height * 0.52 <= item[0] <= page_height * 0.96 and item[2] >= 8
+    ]
+    if not visible:
+        return ""
+    max_size = max(item[2] for item in visible)
+    candidates = [item for item in visible if item[2] >= max(12, max_size * 0.68)]
+    if not candidates:
+        return ""
+
+    lines: List[Dict[str, Any]] = []
+    for y, x, size, text in sorted(candidates, key=lambda item: (-item[0], item[1])):
+        line = next((item for item in lines if abs(item["y"] - y) <= 6), None)
+        if line is None:
+            line = {"y": y, "size": size, "parts": []}
+            lines.append(line)
+        line["size"] = max(line["size"], size)
+        line["parts"].append((x, text))
+
+    normalized_lines = []
+    for line in sorted(lines, key=lambda item: -item["y"]):
+        text = join_pdf_title_fragments([part for _x, part in sorted(line["parts"])])
+        if text and text.casefold() not in {"abstract", "introduction"}:
+            normalized_lines.append({"y": line["y"], "size": line["size"], "text": text})
+
+    blocks: List[List[Dict[str, Any]]] = []
+    for line in normalized_lines:
+        if not blocks or blocks[-1][-1]["y"] - line["y"] > max(34, line["size"] * 2.1):
+            blocks.append([line])
+        else:
+            blocks[-1].append(line)
+
+    ranked: List[Tuple[float, str]] = []
+    for block in blocks:
+        title = clean_pdf_title(" ".join(line["text"] for line in block))
+        if not is_useful_pdf_title(title, fallback_stem):
+            continue
+        average_size = sum(line["size"] for line in block) / len(block)
+        ranked.append((average_size * min(len(title), 120), title))
+    return max(ranked, default=(0, ""), key=lambda item: item[0])[1]
+
+
+def extract_pdf_title(path: pathlib.Path, fallback_stem: str = "") -> str:
+    fallback = clean_pdf_title(fallback_stem or path.stem)
+    if PdfReader is None:
+        return fallback
+    try:
+        reader = PdfReader(path)
+        metadata_title = clean_pdf_title(getattr(reader.metadata, "title", "")) if reader.metadata else ""
+        if is_useful_pdf_title(metadata_title, fallback):
+            return metadata_title
+        if reader.pages:
+            page_title = first_page_pdf_title(reader.pages[0], fallback)
+            if page_title:
+                return page_title
+    except Exception:
+        pass
+    return fallback
+
+
+def source_pdf_stem(source: str) -> str:
+    value = str(source or "").strip()
+    if value.startswith("upload:"):
+        value = value.removeprefix("upload:")
+    elif value.startswith("http://") or value.startswith("https://"):
+        value = urllib.parse.unquote(urllib.parse.urlparse(value).path)
+    return clean_pdf_title(pathlib.Path(value).stem)
 
 
 def default_home() -> pathlib.Path:
@@ -551,6 +691,21 @@ class Store:
             rows = con.execute("select * from papers order by created_at desc").fetchall()
             return [dict(row) for row in rows]
 
+    def refresh_filename_paper_titles(self) -> int:
+        updated = 0
+        for paper in self.list_papers():
+            fallback = source_pdf_stem(paper.get("source") or "")
+            if not fallback or clean_pdf_title(paper.get("title")).casefold() != fallback.casefold():
+                continue
+            path = pathlib.Path(paper["path"]).expanduser()
+            if not path.exists():
+                continue
+            title = extract_pdf_title(path, fallback)
+            if title and title.casefold() != fallback.casefold():
+                self.update_paper_title(paper["id"], title)
+                updated += 1
+        return updated
+
     def get_paper(self, paper_id: str) -> Optional[Dict[str, Any]]:
         with self.connect() as con:
             row = con.execute("select * from papers where id = ?", (paper_id,)).fetchone()
@@ -716,9 +871,9 @@ class Store:
         if src.suffix.lower() != ".pdf":
             raise ValueError("Only PDF files are supported.")
         paper_id = str(uuid.uuid4())
-        name = title or src.stem
         dest = self.papers_dir / f"{paper_id}-{slugify(src.name)}"
         shutil.copy2(src, dest)
+        name = clean_pdf_title(title) or extract_pdf_title(dest, src.stem)
         return self._insert_paper(paper_id, name, dest, str(src))
 
     def add_paper_from_url(self, url: str, title: Optional[str] = None) -> Dict[str, Any]:
@@ -737,7 +892,7 @@ class Store:
         if not data.startswith(b"%PDF") and "pdf" not in content_type.lower():
             raise ValueError("The URL did not return a PDF file.")
         dest.write_bytes(data)
-        name = title or pathlib.Path(basename).stem
+        name = clean_pdf_title(title) or extract_pdf_title(dest, pathlib.Path(basename).stem)
         return self._insert_paper(paper_id, name, dest, url)
 
     def add_paper_from_upload(self, filename: str, data_base64: str, title: Optional[str] = None) -> Dict[str, Any]:
@@ -752,7 +907,7 @@ class Store:
         paper_id = str(uuid.uuid4())
         dest = self.papers_dir / f"{paper_id}-{slugify(filename)}"
         dest.write_bytes(data)
-        name = title or pathlib.Path(filename).stem
+        name = clean_pdf_title(title) or extract_pdf_title(dest, pathlib.Path(filename).stem)
         return self._insert_paper(paper_id, name, dest, f"upload:{filename}")
 
     def save_message_attachments(self, conv_id: str, attachments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1008,7 +1163,7 @@ class Store:
             return
         for pdf in sorted(papers_dir.rglob("*.pdf")):
             try:
-                self.add_paper_from_path(str(pdf), title=pdf.stem)
+                self.add_paper_from_path(str(pdf))
             except Exception:
                 continue
 
@@ -1905,6 +2060,7 @@ def main() -> None:
     args = parser.parse_args()
 
     store = Store(pathlib.Path(args.home).expanduser())
+    refreshed_titles = store.refresh_filename_paper_titles()
     if not args.no_auto_import:
         store.auto_import_workspace_papers(pathlib.Path.cwd())
         store.auto_import_workspace_papers(APP_DIR.parent)
@@ -1917,6 +2073,8 @@ def main() -> None:
     url = f"http://{args.host}:{args.port}"
     print(f"Paper Codex Reader running at {url}")
     print(f"Data directory: {store.home}")
+    if refreshed_titles:
+        print(f"Updated {refreshed_titles} filename-based paper title(s).")
     if args.open:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:
