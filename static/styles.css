@@ -2324,6 +2324,7 @@ body.resizing-chat {
 .markdown-body blockquote,
 .markdown-body pre,
 .markdown-body .markdown-table-wrap,
+.markdown-body .math-block,
 .markdown-body h3,
 .markdown-body h4,
 .markdown-body h5 {
@@ -2422,6 +2423,31 @@ body.resizing-chat {
 
 .markdown-body td {
   color: #1f2937;
+}
+
+.markdown-body .math-inline {
+  display: inline;
+}
+
+.markdown-body .math-block {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 6px 2px;
+  color: var(--text);
+  text-align: center;
+}
+
+.markdown-body .math-block .katex-display {
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+}
+
+.markdown-body .math-expression.math-error {
+  color: #b91c1c;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  white-space: pre-wrap;
 }
 
 .mermaid-block {

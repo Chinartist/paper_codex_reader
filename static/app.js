@@ -1973,6 +1973,7 @@ function appendMessage(role, content, meta = {}) {
     node.querySelector(".edit-message-btn").addEventListener("click", () => startResendEdit(content, meta.id || ""));
   }
   box.appendChild(node);
+  renderMathExpressions(node);
   renderMermaidDiagrams(node);
   updateAnswerNavButtons();
 }
@@ -2041,6 +2042,14 @@ function markdownToHtml(value) {
       continue;
     }
 
+    const mathBlock = readMathBlock(lines, index);
+    if (mathBlock) {
+      closeList();
+      html.push(mathMarkup(mathBlock.source, true));
+      index = mathBlock.nextIndex;
+      continue;
+    }
+
     const heading = /^(#{1,3})\s+(.+)$/.exec(line);
     if (heading) {
       closeList();
@@ -2096,6 +2105,7 @@ function markdownToHtml(value) {
         || /^[-*]\s+/.test(next)
         || /^\d+[.)]\s+/.test(next)
         || isMarkdownTableStart(lines, index)
+        || readMathBlock(lines, index)
       ) {
         break;
       }
@@ -2108,6 +2118,64 @@ function markdownToHtml(value) {
   if (inCode) flushCode();
   closeList();
   return html.join("");
+}
+
+function readMathBlock(lines, startIndex) {
+  const firstLine = String(lines[startIndex] || "").trim();
+  const delimiters = firstLine.startsWith("\\[")
+    ? { open: "\\[", close: "\\]" }
+    : firstLine.startsWith("$$")
+      ? { open: "$$", close: "$$" }
+      : null;
+  if (!delimiters) return null;
+
+  const firstContent = firstLine.slice(delimiters.open.length);
+  if (firstContent.endsWith(delimiters.close)) {
+    return {
+      source: firstContent.slice(0, -delimiters.close.length).trim(),
+      nextIndex: startIndex + 1,
+    };
+  }
+  if (firstContent.trim()) return null;
+
+  const sourceLines = [];
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    const current = String(lines[index] || "");
+    if (current.trim() === delimiters.close) {
+      return { source: sourceLines.join("\n").trim(), nextIndex: index + 1 };
+    }
+    sourceLines.push(current);
+  }
+  return null;
+}
+
+function mathMarkup(source, displayMode = false) {
+  const tag = displayMode ? "div" : "span";
+  const className = displayMode ? "math-expression math-block" : "math-expression math-inline";
+  const escapedSource = escapeHtml(source);
+  return `<${tag} class="${className}" data-latex="${escapedSource}">${escapedSource}</${tag}>`;
+}
+
+function renderMathExpressions(root = document) {
+  const nodes = [...root.querySelectorAll(".math-expression:not([data-processed])")];
+  for (const node of nodes) {
+    const source = node.dataset.latex || node.textContent || "";
+    node.dataset.processed = "true";
+    if (!window.katex) continue;
+    try {
+      window.katex.render(source, node, {
+        displayMode: node.classList.contains("math-block"),
+        throwOnError: false,
+        strict: "ignore",
+        trust: false,
+        output: "htmlAndMathml",
+      });
+    } catch (error) {
+      node.textContent = source;
+      node.classList.add("math-error");
+      console.warn("KaTeX render failed", error);
+    }
+  }
 }
 
 function isMarkdownTableStart(lines, index) {
@@ -2581,9 +2649,19 @@ function markMermaidRenderError(root = document) {
 }
 
 function inlineMarkdown(value) {
-  return escapeHtml(value)
+  const mathExpressions = [];
+  const protectedValue = String(value || "").replace(/\\\(([\s\S]+?)\\\)/g, (_match, source) => {
+    const token = `\uE000MATH${mathExpressions.length}\uE001`;
+    mathExpressions.push({ token, source });
+    return token;
+  });
+  let html = escapeHtml(protectedValue)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  for (const expression of mathExpressions) {
+    html = html.replace(expression.token, mathMarkup(expression.source, false));
+  }
+  return html;
 }
 
 async function copyMessageContent(content) {
