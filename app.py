@@ -41,6 +41,7 @@ except ImportError:  # The reader still works with filename fallbacks if install
 APP_DIR = pathlib.Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
 DEFAULT_MODEL = "gpt-5.6-sol"
+CODEX_DEFAULT_MODEL = "__codex_default__"
 
 
 def clean_pdf_title(value: Any) -> str:
@@ -281,11 +282,38 @@ def codex_unavailable_message(path: str, detail: str) -> str:
     return message
 
 
+def hidden_subprocess_kwargs(new_process_group: bool = False) -> Dict[str, Any]:
+    if not sys.platform.startswith("win"):
+        return {}
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    if new_process_group:
+        flags |= getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    return {"creationflags": flags}
+
+
+def safe_unlink(path: str | pathlib.Path, attempts: int = 4) -> bool:
+    target = pathlib.Path(path)
+    for attempt in range(max(1, attempts)):
+        try:
+            target.unlink(missing_ok=True)
+            return True
+        except PermissionError:
+            if attempt + 1 < attempts:
+                time.sleep(0.1 * (attempt + 1))
+        except OSError as exc:
+            if getattr(exc, "winerror", None) != 32 or attempt + 1 >= attempts:
+                return False
+            time.sleep(0.1 * (attempt + 1))
+    return False
+
+
 def probe_codex_cli(path: str, timeout: int = 10) -> Tuple[bool, str]:
     if not path_exists_or_command(path):
         return False, f"Codex CLI not found: {path}"
     try:
-        result = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=timeout)
+        result = subprocess.run(
+            [path, "--version"], capture_output=True, text=True, timeout=timeout, **hidden_subprocess_kwargs()
+        )
     except subprocess.TimeoutExpired:
         return False, codex_unavailable_message(path, "timed out while running --version")
     except Exception as exc:
@@ -298,6 +326,42 @@ def probe_codex_cli(path: str, timeout: int = 10) -> Tuple[bool, str]:
 
 def codex_home() -> pathlib.Path:
     return pathlib.Path(os.environ.get("CODEX_HOME") or pathlib.Path.home() / ".codex").expanduser()
+
+
+def available_codex_models() -> List[Dict[str, Any]]:
+    cache_path = codex_home() / "models_cache.json"
+    try:
+        data = json.loads(cache_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return []
+    if not isinstance(data, dict):
+        return []
+
+    result: List[Dict[str, Any]] = []
+    for model in data.get("models") or []:
+        if not isinstance(model, dict) or model.get("visibility") != "list":
+            continue
+        slug = str(model.get("slug") or "").strip()
+        if not slug:
+            continue
+        result.append(
+            {
+                "slug": slug,
+                "name": str(model.get("display_name") or slug),
+                "description": str(model.get("description") or ""),
+                "default_reasoning_level": str(model.get("default_reasoning_level") or ""),
+                "reasoning_levels": [
+                    str(item.get("effort"))
+                    for item in model.get("supported_reasoning_levels") or []
+                    if isinstance(item, dict) and item.get("effort")
+                ],
+                "fast": any(
+                    isinstance(item, dict) and item.get("id") == "priority"
+                    for item in model.get("service_tiers") or []
+                ),
+            }
+        )
+    return result
 
 
 def utc_iso_from_epoch(value: Any) -> Optional[str]:
@@ -1196,7 +1260,9 @@ class CodexRunner:
         if version_ok:
             result["version"] = version_message
             try:
-                login = subprocess.run([path, "login", "status"], capture_output=True, text=True, timeout=20)
+                login = subprocess.run(
+                    [path, "login", "status"], capture_output=True, text=True, timeout=20, **hidden_subprocess_kwargs()
+                )
                 result["login_status"] = (login.stdout or login.stderr).strip()
                 result["login_ok"] = login.returncode == 0
             except Exception as exc:
@@ -1208,6 +1274,7 @@ class CodexRunner:
             result["login_ok"] = False
         result["account"] = safe_codex_account_info()
         result["usage"] = latest_codex_usage()
+        result["models"] = available_codex_models()
         return result
 
     def login(self) -> Dict[str, Any]:
@@ -1219,7 +1286,7 @@ class CodexRunner:
             "stderr": subprocess.DEVNULL,
         }
         if sys.platform.startswith("win"):
-            popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            popen_kwargs.update(hidden_subprocess_kwargs(new_process_group=True))
         else:
             popen_kwargs["start_new_session"] = True
         process = subprocess.Popen([path, "login"], **popen_kwargs)
@@ -1232,7 +1299,9 @@ class CodexRunner:
     def logout(self) -> Dict[str, Any]:
         path = self._configured_path()
         self._ensure_cli(path)
-        result = subprocess.run([path, "logout"], capture_output=True, text=True, timeout=30)
+        result = subprocess.run(
+            [path, "logout"], capture_output=True, text=True, timeout=30, **hidden_subprocess_kwargs()
+        )
         output = (result.stdout or result.stderr).strip()
         if result.returncode != 0:
             raise ValueError(output or f"Codex logout failed with exit code {result.returncode}")
@@ -1263,7 +1332,7 @@ class CodexRunner:
         verbosity = settings.get("verbosity", "medium").strip()
         timeout = int(settings.get("codex_timeout_seconds", "600") or "600")
         opts: List[str] = ['-c', 'approval_policy="never"']
-        if model:
+        if model and model != CODEX_DEFAULT_MODEL:
             opts += ["-m", model]
         if effort:
             opts += ["-c", f'model_reasoning_effort="{effort}"']
@@ -1350,6 +1419,8 @@ class CodexRunner:
                 stdout=stdout_file,
                 stderr=stderr_file,
                 text=True,
+                encoding="utf-8",
+                **hidden_subprocess_kwargs(),
             )
             assert proc.stdin is not None
             proc.stdin.write(prompt)
@@ -1373,18 +1444,22 @@ class CodexRunner:
                         proc.wait(timeout=5)
                     raise RuntimeError(f"Codex timed out after {timeout} seconds.")
                 time.sleep(0.2)
+        except BaseException:
+            stdout_file.close()
+            stderr_file.close()
+            safe_unlink(stdout_file.name)
+            safe_unlink(stderr_file.name)
+            safe_unlink(out_path)
+            raise
         finally:
             stdout_file.close()
             stderr_file.close()
         stdout = pathlib.Path(stdout_file.name).read_text(encoding="utf-8", errors="replace")
         stderr = pathlib.Path(stderr_file.name).read_text(encoding="utf-8", errors="replace")
-        pathlib.Path(stdout_file.name).unlink(missing_ok=True)
-        pathlib.Path(stderr_file.name).unlink(missing_ok=True)
+        safe_unlink(stdout_file.name)
+        safe_unlink(stderr_file.name)
         output = pathlib.Path(out_path).read_text(encoding="utf-8", errors="replace").strip()
-        try:
-            pathlib.Path(out_path).unlink(missing_ok=True)
-        except Exception:
-            pass
+        safe_unlink(out_path)
         if proc.returncode != 0:
             details = (stderr or stdout or "").strip()
             raise RuntimeError(f"Codex failed with exit code {proc.returncode}.\n{details}")

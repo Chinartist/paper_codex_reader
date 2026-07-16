@@ -92,8 +92,11 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 const DEFAULT_MODEL = "gpt-5.6-sol";
+const CODEX_DEFAULT_MODEL = "__codex_default__";
+const CUSTOM_MODEL_OPTION = { value: "__custom__", label: "自定义..." };
 
-const MODEL_OPTIONS = [
+let MODEL_OPTIONS = [
+  { value: CODEX_DEFAULT_MODEL, label: "Codex 默认（自动）", reasoning: ["low", "medium", "high", "xhigh", "max", "ultra"], fast: true },
   { value: "gpt-5.6-sol", label: "GPT-5.6 Sol · 最强", reasoning: ["low", "medium", "high", "xhigh", "max", "ultra"], fast: true },
   { value: "gpt-5.6-terra", label: "GPT-5.6 Terra · 均衡", reasoning: ["low", "medium", "high", "xhigh", "max", "ultra"], fast: true },
   { value: "gpt-5.6-luna", label: "GPT-5.6 Luna · 省用量", reasoning: ["low", "medium", "high", "xhigh", "max"], fast: true },
@@ -101,7 +104,7 @@ const MODEL_OPTIONS = [
   { value: "gpt-5.4", label: "GPT-5.4", reasoning: ["low", "medium", "high", "xhigh"], fast: true },
   { value: "gpt-5.4-mini", label: "GPT-5.4 mini", reasoning: ["low", "medium", "high", "xhigh"], fast: false },
   { value: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark", reasoning: ["low", "medium", "high", "xhigh"], fast: false },
-  { value: "__custom__", label: "自定义..." },
+  CUSTOM_MODEL_OPTION,
 ];
 
 const REASONING_LABELS = {
@@ -230,9 +233,38 @@ function populateModelSelects() {
   for (const id of ["modelInput", "quickModelInput"]) {
     const select = $(id);
     select.innerHTML = MODEL_OPTIONS.map((option) => (
-      `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`
+      `<option value="${escapeHtml(option.value)}" title="${escapeHtml(option.title || "")}">${escapeHtml(option.label)}</option>`
     )).join("");
   }
+}
+
+function updateAvailableModels(models) {
+  if (!Array.isArray(models) || !models.length) return;
+  const defaultModel = models.find((model) => model.slug === DEFAULT_MODEL) || models[0];
+  MODEL_OPTIONS = [
+    {
+      value: CODEX_DEFAULT_MODEL,
+      label: "Codex 默认（自动）",
+      reasoning: Array.isArray(defaultModel.reasoning_levels) && defaultModel.reasoning_levels.length
+        ? defaultModel.reasoning_levels
+        : FALLBACK_REASONING_LEVELS,
+      fast: Boolean(defaultModel.fast),
+    },
+    ...models.map((model) => ({
+      value: model.slug,
+      label: model.name && model.name.toLowerCase() !== model.slug.toLowerCase()
+        ? `${model.name} · ${model.slug}`
+        : model.slug,
+      title: model.description || "",
+      reasoning: Array.isArray(model.reasoning_levels) && model.reasoning_levels.length
+        ? model.reasoning_levels
+        : FALLBACK_REASONING_LEVELS,
+      fast: Boolean(model.fast),
+    })),
+    CUSTOM_MODEL_OPTION,
+  ];
+  populateModelSelects();
+  syncModelControls(state.settings?.model || "");
 }
 
 function syncModelControls(value) {
@@ -500,6 +532,7 @@ function renderUsagePeek(usage) {
 
 async function loadStatus() {
   const status = await api("/api/status");
+  updateAvailableModels(status.models);
   const login = status.login_ok ? "已登录" : "未确认登录";
   const exists = Boolean(status.exists);
   const accountName = status.login_ok ? accountDisplayName(status.account) : "";
